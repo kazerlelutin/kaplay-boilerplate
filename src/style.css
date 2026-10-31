@@ -1,0 +1,44 @@
+:root {
+    color-scheme: dark;
+    --bg: #0d0d17;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    background: var(--bg);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    font-family: system-ui, sans-serif;
+}
+
+/* KAPLAY mesure parentElement.offsetWidth : #app doit avoir une vraie boîte. */
+#app {
+    width: 100vw;
+    height: 100dvh;
+    display: grid;
+    place-items: center;
+}
+
+canvas {
+    image-rendering: pixelated;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
