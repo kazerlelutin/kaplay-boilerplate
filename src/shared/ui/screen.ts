@@ -1,18 +1,14 @@
-function getRoot(): HTMLDivElement {
-  const root = document.querySelector<HTMLDivElement>("#game-ui");
-  if (!root) throw new Error("Élément #game-ui introuvable");
-  return root;
-}
+const root = document.querySelector<HTMLDivElement>("#game-ui");
+if (!root) throw new Error("Élément #game-ui introuvable");
 
 /** Une seule interface active à la fois, distincte du canvas de jeu. */
 export function setScreen(markup: string): HTMLDivElement {
-  const root = getRoot();
   root.innerHTML = markup;
   return root;
 }
 
 export function screenRoot(): HTMLDivElement {
-  return getRoot();
+  return root;
 }
 
 export function showExplorationHUD(zone: string, objective: string, hint = "Flèches / ZQSD : bouger  ·  E / Entrée : interagir"): void {

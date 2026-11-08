@@ -26,8 +26,9 @@ Ouvrir l'URL affichée par Vite (habituellement http://localhost:5173).
 7. Revenir au point d'extraction bleu pour lire le rapport WUA.
 
 **Déplacements** : flèches ou ZQSD (une case par pression). **Interactions** : E, Entrée ou Espace.
-**Combats** : choisir un module ennemi à viser, un module allié à réparer, puis cliquer sur une action.
-La barrière adverse absorbe une partie des tirs. Le coupe-flux l'ignore. Sans sa barrière, l'adversaire redirige le Flux et frappe plus fort.
+**Combats** : choisir un personnage directement sur le plateau ou dans le bandeau des alliés, sélectionner l'ordre, puis une cible ou une case. La prévisualisation affiche le coût, la distance, la portée et les conséquences. Cliquer ensuite **Confirmer l'action**. Les ordres utilisent le Flux disponible pendant la phase du joueur : il est possible d'en donner plusieurs. **Terminer le tour** déclenche la riposte ennemie, présentée séparément ; **Commencer le tour suivant** rend les 6 Flux.
+
+Les distances sont mesurées horizontalement et verticalement, sans diagonales. Kumji attaque à 4 cases, Lyrius utilise son coupe-flux à 5 cases, la réparation porte à 3 cases. Un déplacement d'une case coûte 1 Flux. La barrière ennemie absorbe une partie des tirs directs, mais pas le coupe-flux. Sans barrière, le Flux adverse est redirigé vers l'arme et la riposte devient plus dangereuse. Pour neutraliser, Lyrius doit être à portée de l'émetteur désactivé.
 
 ## Vérifications
 
@@ -36,7 +37,7 @@ bun run test
 bun run build
 ```
 
-Les tests portent sur la logique de combat indépendante du rendu.
+Les tests portent sur la logique de combat indépendante du rendu, les phases du tour, la prévisualisation, les distances et les déplacements.
 La CI GitHub Actions exécute les tests et le build sur chaque PR.
 
 ## Structure
@@ -61,7 +62,7 @@ docs/PROTOTYPE.md  # Périmètre, limites et prochaines itérations
 
 ## Limites de cette tranche
 
-- Deux cartes très petites et deux combats prédéfinis.
+- Deux cartes très petites et deux combats prédéfinis (plateau de combat tactique 9 × 5).
 - Graphismes et animations non définitifs.
 - Pas encore de sauvegarde, d'inventaire, de chimères, de monde ouvert ni de progression persistante.
 - Déplacement case par case, clavier sur bureau ; commandes tactiles non implémentées.
