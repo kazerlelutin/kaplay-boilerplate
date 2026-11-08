@@ -3,7 +3,7 @@ import type { GameSession } from "../../game/session";
 import {
   BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, COVER, JAMMERS,
   createBattle, advanceRealtimeCycle, distance, enemySourceExposed, produceFluxSecond, fluxPerSecond,
-  findModule, getEnemyIntent,
+  findModule,
   performAction, previewAction,
   type BattleAction, type BattleEvent, type BattleModule, type Point,
 } from "./domain/battle";
@@ -228,7 +228,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
           if(a&&b)segments.push(svgLine(a.position,b.position,"rpg-transfer"));
         }
         return segments;
-      }).join("")??"";
+      }).join("")??"" : "";
       // Le réseau ennemi n'est pas affiché : ses traits brouillaient la lecture de l'arène.
       const recent=feedbackFor>0?feedback:[];
       const enemyFX=recent.filter(e=>e.kind==="move"||e.kind==="attack"||e.kind==="special")
