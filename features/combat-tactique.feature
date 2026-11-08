@@ -104,3 +104,33 @@ Fonctionnalité: Réseau de Flux — allocation, réserves et ripostes
     Quand une impulsion déclenche le déplacement ou l'attaque de la Sentinelle
     Alors l'effet est visible sur la carte
     Et le résultat reste disponible dans le récapitulatif de riposte
+
+  Scénario: Produire le Flux chaque seconde sans accélérer les ennemis
+    Étant donné une cellule intacte
+    Quand une seconde de simulation s'écoule
+    Alors deux unités de Flux sont produites dans sa réserve
+    Et la riposte ennemie attend son propre cycle
+
+  Scénario: Intercepter un projectile
+    Étant donné Kumji placé entre la Sentinelle et le générateur
+    Quand la Sentinelle tire vers le générateur
+    Alors Kumji intercepte les dégâts
+    Et un projectile montre le trajet réel
+
+  Scénario: Restaurer un émetteur ennemi neutralisé
+    Étant donné un émetteur neutralisé et un relais encore opérationnel
+    Quand deux réactions ennemies passent
+    Alors l'émetteur reste neutralisé
+    Quand le relais le répare
+    Alors l'émetteur reste éteint
+    Quand le relais le remet en service
+    Alors l'émetteur peut de nouveau combattre
+
+  Scénario: Compétences différentes
+    Étant donné une équipe alimentée
+    Quand Kumji utilise sa frappe de rupture
+    Alors il inflige des dégâts directs importants
+    Quand Darla lance le dôme protecteur
+    Alors un bouclier visible couvre la cellule
+    Quand Lyrius lance une impulsion EMP
+    Alors l'énergie ennemie est drainée et ses réactions sont retardées

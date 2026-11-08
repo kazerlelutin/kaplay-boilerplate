@@ -3,7 +3,7 @@ import type { GameSession } from "../../game/session";
 import {
   BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, COVER, JAMMERS,
   createBattle, advanceRealtimeCycle, distance, enemySourceExposed, produceFluxSecond, fluxPerSecond,
-  findModule, getEnemyIntent, getFluxEconomy, isBoardCellFree, moveCost,
+  findModule, getEnemyIntent,
   performAction, previewAction,
   type BattleAction, type BattleEvent, type BattleModule, type Point,
 } from "./domain/battle";
@@ -355,7 +355,6 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     }
     function render():void {
       if(battle.status!=="active") {running=false;resultScreen();return;}
-      const economy=getFluxEconomy(battle);
       const root=setScreen(`<main class="rpg-combat">
         <div class="rpg-shell">
           <header class="rpg-header">
@@ -431,15 +430,16 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       if(!running || battle.status!=="active")return;
       const dt=k.dt();
       energyElapsed+=dt;
+      let energyUpdated=false;
       while(energyElapsed>=1) {
         energyElapsed-=1;
         const produced=produceFluxSecond(battle);
-        if (produced>0) feedbackFor=Math.max(feedbackFor,.65);
+        if (produced>0) { energyUpdated=true; feedbackFor=Math.max(feedbackFor,.65); }
       }
       elapsed+=dt;
       const clock=document.querySelector<HTMLElement>("#rpg-clock");
       if(clock)clock.textContent=Math.max(0,Math.ceil(CYCLE_SECONDS-elapsed))+"s";
-      if(elapsed<CYCLE_SECONDS)return;
+      if(elapsed<CYCLE_SECONDS) {if(energyUpdated)render();return;}
       elapsed-=CYCLE_SECONDS;
       advanceRealtimeCycle(battle);
       feedback=battle.enemyEvents.slice(-6);

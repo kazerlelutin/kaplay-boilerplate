@@ -622,10 +622,8 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
     state.round += 1;
     // Production séparée de la réaction : +Flux réellement accordé chaque seconde.
     const available = 0;
-    const before = state.flux;
     state.phase = "allocation";
     state.events = [];
-    const overflow = Math.max(0, before + available - state.maxFlux);
     note(state, "Réaction " + state.round + " : réserves conservées (production à la seconde).","turn");
     return { ok: true };
   }

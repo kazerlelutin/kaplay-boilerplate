@@ -1,6 +1,6 @@
 # The Dunblane Quest — MVP jouable
 
-Premier parcours vertical de **The Dunblane Quest** : RPG d'exploration 2D isométrique à l'esthétique 16 bits, avec des combats tactiques au tour par tour par **Flux**.
+Premier parcours vertical de **The Dunblane Quest** : RPG d'exploration 2D isométrique à l'esthétique 16 bits, avec des combats tactiques hybrides (temps réel et pause) utilisant le réseau de **Flux**.
 
 Les graphismes sont volontairement provisoires (formes dessinées par KAPLAY).
 
@@ -30,11 +30,17 @@ Ouvrir l'URL affichée par Vite (habituellement http://localhost:5173).
 
 **Si la chaîne est rompue**, un lien orange apparaît et la prévisualisation explique pourquoi : distance entre deux unités, obstacle ou brouilleur. Les réserves déjà stockées permettent tout de même à une unité isolée de continuer à agir. Une action ne prélève jamais d'énergie lors de sa prévisualisation. Les unités conservent leurs réserves entre les cycles (9 Flux max par opérateur, 12 à la cellule).
 
-**Simulation hybride** : le combat commence en pause tactique. **Espace** ou le bouton **▶ Lancer / ⏸ Pause** démarre ou suspend la simulation. Toutes les 3 secondes, l'ennemi se déplace ou agit, puis la cellule et le noyau adverse produisent leur énergie. Les déplacements, impacts, réparations et recharges adverses apparaissent sur le terrain et dans un récapitulatif agrandi.
+**Simulation hybride** : le combat commence en pause tactique. **Espace** ou le bouton **▶ Lancer / ⏸ Pause** démarre ou suspend la simulation. Le générateur produit de l'énergie **chaque seconde** ; les ennemis se déplacent et réagissent **toutes les 3 secondes**. Les déplacements, impacts, réparations et recharges adverses apparaissent sur le terrain et dans un récapitulatif agrandi.
 
 **Commandes clavier** : **1, 2, 3** pour Kumji, Darla, Lyrius ; **4 à 9** pour les actions contextuelles ; **flèches** ou **ZQSD** pour préparer un déplacement orthogonal ; **A/E/W/C** pour une diagonale ; **Entrée** pour confirmer ; **Espace** pour mettre en pause/reprendre. Les boutons +/− permettent d'ajuster la puissance des actions.
 
-**Production et rôles** : la cellule intacte produit 9 Flux par cycle (moins 3 d'entretien), avec une réserve de 12. Lyrius peut investir 3 Flux pour augmenter la production de +1/cycle, jusqu'à +3 ; il peut aussi réparer. Darla protège la source ; Kumji frappe en fonction de la puissance dépensée. La barrière et le relais ennemis doivent être coupés avant de cibler directement le noyau, mais la neutralisation non létale reste possible.
+**Production et rôles** : la cellule intacte produit **2 Flux par seconde**, avec une réserve de 12. Lyrius peut investir 3 Flux pour augmenter durablement cette cadence de +1/seconde, jusqu'à +3 ; il peut aussi réparer. Darla protège la source ; Kumji frappe en fonction de la puissance dépensée. La barrière et le relais ennemis doivent être coupés avant de cibler directement le noyau, mais la neutralisation non létale reste possible.
+
+**Retours audiovisuels** : des sons synthétiques peuvent être coupés par le bouton ♪. Un projectile animé indique les attaques, les PV restent visibles sur les unités, et le bouclier de Darla apparaît autour de la cellule lorsqu'il est actif. Une action peut être confirmée par **double-clic sur sa cible** après la première sélection, ou avec Entrée.
+
+**Compétences spéciales** : Kumji possède une **frappe de rupture** à 6 Flux, Darla crée un **dôme protecteur** à 5 Flux, Lyrius déclenche une **impulsion EMP** à 5 Flux (draine les réserves ennemies et coupe les liaisons). Le **coupe-flux ordinaire** n'est plus un simple tir : il inflige peu de dégâts, mais retire l'énergie ennemie et perturbe sa recharge. La **neutralisation** met fin au combat sans détruire le générateur, lorsque les modules critiques sont neutralisés.
+
+**Remise en service adverse** : une arme désactivée attend deux réactions ennemies avant qu'un relais puisse la réparer, puis une réaction supplémentaire pour la redémarrer. L'adversaire de mission possède également un éclaireur spécialisé mobile, différent du réseau du joueur.
 
 **Terrain** : les déplacements diagonaux coûtent 2 Flux (1 en orthogonal). Les rochers bloquent mouvements et tirs, les couverts ▥ réduisent les dégâts, les brouilleurs ⌁ bloquent les transmissions. La cellule peut alimenter un allié directement à 4 cases ; les alliés relaient entre eux à 3 cases sans obstacle, ce qui étend la portée pratique du réseau.
 
@@ -71,7 +77,7 @@ docs/PROTOTYPE.md  # Périmètre, limites et prochaines itérations
 
 ## Limites de cette tranche
 
-- Deux cartes très petites et deux combats prédéfinis (plateau de combat tactique 9 × 5).
+- Deux cartes d'exploration très petites et deux combats prédéfinis (plateau tactique 13 × 7).
 - Graphismes et animations non définitifs.
 - Pas encore de sauvegarde, d'inventaire, de chimères, de monde ouvert ni de progression persistante.
 - Déplacement case par case, clavier sur bureau ; commandes tactiles non implémentées.
