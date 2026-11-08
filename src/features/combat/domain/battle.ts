@@ -621,7 +621,6 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
   if (action.type === "next") {
     state.round += 1;
     // Production séparée de la réaction : +Flux réellement accordé chaque seconde.
-    const available = 0;
     state.phase = "allocation";
     state.events = [];
     note(state, "Réaction " + state.round + " : réserves conservées (production à la seconde).","turn");
