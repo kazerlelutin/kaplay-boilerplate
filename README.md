@@ -23,7 +23,7 @@ Ouvrir l'URL affichée par Vite (habituellement http://localhost:5173).
 4. Dans la cour, rejoindre le portail doré pour sortir.
 5. Dans les ruines, récupérer le cristal turquoise, puis approcher l'adversaire rouge.
 6. En combat réel, désactiver **l'émetteur et le relais**, puis cliquer **Neutraliser**.
-7. Revenir au point d'extraction bleu pour lire le rapport WUA.
+7. Après avoir confirmé la neutralisation, le combat se ferme automatiquement et vous revenez dans la zone précédente. Rejoindre ensuite le point d'extraction bleu pour lire le rapport WUA.
 
 **Déplacements** : flèches ou ZQSD (une case par pression). **Interactions** : E, Entrée ou Espace.
 **Combats** : choisir un personnage directement sur le plateau ou dans le bandeau des alliés, sélectionner l'ordre, puis une cible ou une case. La prévisualisation affiche le coût, la distance, la portée et les conséquences. Cliquer ensuite **Confirmer l'action**. Les ordres utilisent le Flux disponible pendant la phase du joueur : il est possible d'en donner plusieurs. **Terminer le tour** déclenche la riposte ennemie, présentée séparément ; **Commencer le tour suivant** rend les 6 Flux.

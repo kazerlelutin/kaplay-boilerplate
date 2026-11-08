@@ -17,6 +17,7 @@ import {
   type Point,
 } from "./domain/battle";
 import { setScreen } from "../../shared/ui/screen";
+import { completeBattle } from "./finish";
 
 type Choice = "attack" | "cut" | "repair" | "guard" | "neutralize" | "move";
 
@@ -66,18 +67,15 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
 
     const actor = () => findModule(battle.player, actorId)!;
 
+    // Une victoire doit quitter le combat dès la confirmation, sans second bouton.
+    // Le garde évite deux changements de scène si un événement clavier arrive au même moment.
+    let exiting = false;
     function exitBattle(): void {
-      if (battle.status === "victory") {
-        if (session.battleKind === "training") {
-          session.trained = true;
-          k.go("wua");
-        } else {
-          session.battleWon = true;
-          k.go("exterior");
-        }
-      } else if (battle.status === "defeat") {
-        k.go("battle");
-      }
+      if (exiting) return;
+      const destination = completeBattle(battle, session);
+      if (!destination) return;
+      exiting = true;
+      k.go(destination);
     }
     k.onKeyPress("enter", () => {
       if (battle.status !== "active") exitBattle();
@@ -163,22 +161,24 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
     }
 
     function resultScreen(): void {
-      const won = battle.status === "victory";
       const root = setScreen(`
         <main class="screen-center">
           <section class="game-card result-card">
-            <div class="eyebrow">${won ? "OBJECTIF ATTEINT" : "ÉCHEC DE LA MISSION"}</div>
-            <h1>${won ? "Réseau neutralisé" : "Réseau allié hors service"}</h1>
-            <p>${won ? "Les modules critiques ont été coupés sans tuer l'opérateur."
-              : "Votre réseau a perdu son intégrité. Modifiez votre approche et protégez vos opérateurs."}</p>
-            <button class="pixel-button primary" id="end-battle" type="button">${won ? "Continuer ▸" : "Réessayer ▸"}</button>
+            <div class="eyebrow">ÉCHEC DE LA MISSION</div>
+            <h1>Réseau allié hors service</h1>
+            <p>Votre réseau a perdu son intégrité. Modifiez votre approche et protégez vos opérateurs.</p>
+            <button class="pixel-button primary" id="end-battle" type="button">Réessayer ▸</button>
           </section>
         </main>`);
       root.querySelector<HTMLButtonElement>("#end-battle")?.addEventListener("click", exitBattle);
     }
 
     function render(): void {
-      if (battle.status !== "active") return resultScreen();
+      if (battle.status === "victory") {
+        exitBattle();
+        return;
+      }
+      if (battle.status === "defeat") return resultScreen();
       const isPlayer = battle.phase === "player";
       const intent = getEnemyIntent(battle);
       const action = selectedAction();

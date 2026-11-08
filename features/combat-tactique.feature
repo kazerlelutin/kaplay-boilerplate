@@ -27,3 +27,21 @@ Fonctionnalité: Combat tactique lisible
     Alors la riposte ennemie est exécutée et visible
     Et le joueur choisit explicitement de commencer le tour suivant
     Et les six Flux sont alors récupérés
+
+  Scénario: Sortir automatiquement après la victoire en formation
+    Étant donné une neutralisation réussie lors de la formation WUA
+    Quand le joueur confirme la neutralisation
+    Alors il retourne directement à la cour de la WUA
+    Et la formation est marquée comme validée
+    Et aucun bouton "Continuer" n'est nécessaire
+
+  Scénario: Sortir automatiquement après la victoire en mission
+    Étant donné une neutralisation réussie lors de la mission extérieure
+    Quand le joueur confirme la neutralisation
+    Alors il retourne directement dans la zone extérieure
+    Et la mission est marquée comme réussie
+
+  Scénario: Relancer un combat perdu
+    Étant donné la défaite de l'équipe
+    Quand le joueur sélectionne "Réessayer"
+    Alors le même combat recommence
