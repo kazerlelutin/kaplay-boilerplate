@@ -350,7 +350,7 @@ canvas { display: block; image-rendering: pixelated; }
 .rpg-stage-label {display:flex;justify-content:space-between;align-items:center;color:#9cdac8;font-size:11px;gap:10px;margin:3px 6px 9px;}
 .rpg-stage-label span:nth-child(2) {color:#e9d998;text-align:center;}
 .rpg-stage-label span:last-child {color:#f1aa9f;}
-.rpg-board {position:relative;display:grid;grid-template-columns:repeat(9,minmax(0,1fr));grid-template-rows:repeat(5,minmax(0,1fr));aspect-ratio:9/4.55;background:#324f46;}
+.rpg-board {position:relative;display:grid;grid-template-columns:repeat(13,minmax(0,1fr));grid-template-rows:repeat(7,minmax(0,1fr));height:clamp(330px,53vh,620px);aspect-ratio:auto;background:#324f46;}
 .rpg-cell {position:relative;min-width:0;min-height:0;display:flex;justify-content:center;align-items:center;padding:3px;background:#334e47;border:1px solid #4b655b;color:#edece0;cursor:pointer;border-radius:0;}
 .rpg-cell.alt {background:#3b554a}
 .rpg-cell.rock {background:#444b47;cursor:not-allowed}
@@ -431,7 +431,7 @@ canvas { display: block; image-rendering: pixelated; }
   .rpg-shell {padding:9px}
   .rpg-header {flex-wrap:wrap}
   .rpg-header-stats {gap:8px}
-  .rpg-board {aspect-ratio:9/5}
+  .rpg-board {aspect-ratio:auto}
   .rpg-unit {width:93%;padding:2px 0;min-height:65%}
   .rpg-unit b {font-size:15px}
   .rpg-unit-name,.rpg-unit small,.rpg-energy {font-size:8px}
@@ -443,7 +443,7 @@ canvas { display: block; image-rendering: pixelated; }
 
 /* Vague MVP : arène étendue, bouclier visible, jauges et feedback de projectiles. */
 .rpg-shell { width:min(1550px,100%); }
-.rpg-board {aspect-ratio:13/6.45;}
+.rpg-board {aspect-ratio:auto;}
 .rpg-stage {padding:8px;}
 .rpg-cell {padding:1px;}
 .rpg-unit {width:min(92%,72px);min-height:81%;padding:2px 1px;gap:1px;}
@@ -467,10 +467,22 @@ canvas { display: block; image-rendering: pixelated; }
 @keyframes rpg-unit-glow {0%{filter:brightness(1.5)}100%{filter:brightness(1)}}
 .rpg-preview p {min-height:22px;}
 @media(max-width:700px) {
- .rpg-board {aspect-ratio:13/7;}
+ .rpg-board {aspect-ratio:auto;}
  .rpg-unit {min-height:69%;width:97%}
  .rpg-unit-name,.rpg-unit small,.rpg-energy {font-size:7px}
  .rpg-hp {height:7px}
  .rpg-shield-label {font-size:8px;top:-9px;left:-2px}
  .rpg-header-stats {flex-wrap:wrap;justify-content:flex-end}
 }
+
+/* Alignement strict des 13x7 cases et de la couche SVG du combat. */
+.rpg-board { grid-template-columns:repeat(13,minmax(0,1fr));grid-template-rows:repeat(7,minmax(0,1fr));aspect-ratio:auto;height:clamp(330px,53vh,620px); }
+.rpg-stage-label .rpg-stage-tools {display:flex;align-items:center;gap:12px;color:#f0b3aa;font-size:10px;}
+.rpg-network-toggle {padding:5px 9px;font-size:10px;border:1px solid #6aa49a;background:#233f3f;color:#ace6cf;cursor:pointer;}
+.rpg-network-toggle:hover {background:#34625b;}
+.rpg-energy.linked {color:#adf8cb;}
+.rpg-energy.isolated {color:#ffb5a5;}
+.rpg-hero-switch button small {color:#aef4ce;}
+.rpg-link {stroke-opacity:.55;}
+.rpg-link.broken {stroke-opacity:.75;}
+@media (max-width:650px) {.rpg-board {height:clamp(325px,49vh,520px);} .rpg-stage-label .rpg-stage-tools {gap:5px;} }

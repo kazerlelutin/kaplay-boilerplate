@@ -7,7 +7,7 @@ import {
   performAction, previewAction,
   type BattleAction, type BattleEvent, type BattleModule, type Point,
 } from "./domain/battle";
-import { visibleFluxLinks } from "./domain/flux-network";
+import { fluxPath, visibleFluxLinks } from "./domain/flux-network";
 import { lineBlocked } from "./domain/battle";
 import { completeBattle } from "./finish";
 import { setScreen } from "../../shared/ui/screen";
@@ -39,7 +39,9 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     performAction(battle,{type:"orders"});
 
     let actorId = "p-weapon";
-    let command:Command = "attack";
+    let command:Command = "move";
+    let showNetwork = false;
+    let showRoute = false;
     let enemyId = "e-weapon";
     let allyId = "p-source";
     let destination:Point|null = null;
@@ -79,7 +81,8 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     function chooseActor(id:string):void {
       if (!COMMANDS[id]) return;
       actorId=id;
-      command=COMMANDS[id][0];
+      command="move";
+      showRoute=false;
       destination=null;
       warning="";
       render();
@@ -87,6 +90,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     function chooseCommand(name:Command):void {
       if (!COMMANDS[actorId].includes(name)) return;
       command=name;
+      showRoute=true;
       destination=null;
       warning="";
       render();
@@ -134,6 +138,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         return;
       }
       lastTap={key,at:now};
+      showRoute=true;
       if (unit?.id.startsWith("e-")) {
         enemyId=unit.id;
         if (actorId==="p-weapon") command="attack";
@@ -155,6 +160,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     function move(dx:number,dy:number):void {
       if (running || battle.status!=="active") return;
       command="move";
+      showRoute=true;
       const from=actor().position;
       destination={col:from.col+dx,row:from.row+dy};
       warning="";
@@ -166,10 +172,21 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       render();
     }
 
+    function accessibleFlux(id:string):number {
+      const member=findModule(battle.player,id);
+      if(!member || member.hp<=0)return 0;
+      const blocked=(a:Point,b:Point)=>lineBlocked(a,b,true);
+      return member.energy + battle.player
+        .filter(other=>other.id!==id && other.hp>0 && !!fluxPath(battle,id,other.id,blocked))
+        .reduce((total,other)=>total+(other.role==="source"?battle.flux:other.energy),0);
+    }
+
     function unitCard(unit:BattleModule, effect:BattleEvent|undefined):string {
       const mine=unit.id.startsWith("p-");
       const hp=Math.round(100*unit.hp/unit.maxHp);
       const isSource=unit.role==="source";
+      const accessible=mine && !isSource ? accessibleFlux(unit.id) : 0;
+      const connected=mine && !isSource && !!fluxPath(battle,unit.id,"p-source",(a,b)=>lineBlocked(a,b,true));
       const hit=effect?.target===unit.id;
       const shield=mine && battle.guard>0 && (isSource || unit.id==="p-barrier");
       const recovery=unit.hp===0 && unit.id.startsWith("e-") && unit.role!=="source"
@@ -182,7 +199,11 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         <b>${ICONS[unit.id]}</b><span class="rpg-unit-name">${escapeHtml(unit.operator)}</span>
         <span class="rpg-hp"><i style="width:${hp}%"></i></span>
         <small>${unit.hp}/${unit.maxHp} PV</small>
-        <span class="rpg-energy">${isSource?(mine?battle.flux:battle.enemyFlux):unit.energy} ⚡</span>
+        <span class="rpg-energy ${mine&&!isSource?(connected?"linked":"isolated"):""}"
+          title="${mine&&!isSource?escapeHtml("Flux mobilisable : "+accessible+" · Réserve personnelle : "+unit.energy):"Réserve de la source"}">
+          ${isSource?"⚡ "+(mine?battle.flux:battle.enemyFlux)+" stock":mine
+            ?"⚡ "+accessible+" dispo": "⚡ "+unit.energy+" réserve"}
+        </span>
         ${shield?`<span class="rpg-shield-label">◆ ${battle.guard}</span>`:""}
         ${recovery?`<span class="rpg-recovery">${recovery}</span>`:""}
         ${hit?`<span class="rpg-float">${cue}</span>`:""}
@@ -195,12 +216,12 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     function battlefield():string {
       const selected=activeCommand();
       const preview=selected?previewAction(battle,selected):null;
-      const links=visibleFluxLinks(battle,(a,b)=>lineBlocked(a,b,true));
+      const links=showNetwork ? visibleFluxLinks(battle,(a,b)=>lineBlocked(a,b,true)) : [];
       const network=links.map(link=>{
         const a=lookup(link.from),b=lookup(link.to);
         return a&&b?svgLine(a.position,b.position,link.active?"rpg-link":"rpg-link broken"):"";
       }).join("");
-      const energy=preview?.fluxPlan?.donors.flatMap(donor=>{
+      const energy=showRoute && !running ? preview?.fluxPlan?.donors.flatMap(donor=>{
         const segments:string[]=[];
         for(let i=0;i<donor.path.length-1;i++){
           const a=lookup(donor.path[i]),b=lookup(donor.path[i+1]);
@@ -208,10 +229,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         }
         return segments;
       }).join("")??"";
-      const enemyWires=battle.enemy.filter(u=>u.role!=="source"&&u.hp>0).map(unit=>{
-        const core=findModule(battle.enemy,"e-source")!;
-        return svgLine(core.position,unit.position,"rpg-enemy-link");
-      }).join("");
+      // Le réseau ennemi n'est pas affiché : ses traits brouillaient la lecture de l'arène.
       const recent=feedbackFor>0?feedback:[];
       const enemyFX=recent.filter(e=>e.kind==="move"||e.kind==="attack"||e.kind==="special")
         .map(event=>{
@@ -229,11 +247,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
               <animate attributeName="r" from="4" to="30" dur=".8s" fill="freeze"/>
               <animate attributeName="opacity" from="1" to="0" dur=".8s" fill="freeze"/></circle>`;
         }).join("");
-      const enemyPlan=getEnemyIntent(battle);
-      const threat=enemyPlan.target&&battle.status==="active"
-        ? (()=>{const a=lookup("e-weapon"),b=lookup(enemyPlan.target!);
-          return a&&b?svgLine(a.position,b.position,"rpg-intent"):"";})():"";
-      const aim=selected&&battle.phase==="player"&&!running
+      const aim=showRoute && selected&&battle.phase==="player"&&!running
         ? (()=>{const from=lookup(preview?.source??actorId);
           const to=selected.type==="move"?selected.to
             : lookup(preview?.target??(selected.type==="guard"||selected.type==="tune"?"p-source":enemyId))?.position;
@@ -263,11 +277,14 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       return `<div class="rpg-stage">
         <div class="rpg-stage-label"><span>VOTRE ÉQUIPE</span>
           <span>${battle.kind==="training"?"Couper l'émetteur":"Couper l'émetteur et le relais"}</span>
-          <span>ADVERSAIRES</span></div>
-        <div class="rpg-board" aria-label="Terrain tactique et réseaux de Flux">
+          <span class="rpg-stage-tools"><span>ADVERSAIRES</span>
+            <button type="button" class="rpg-network-toggle" data-network>
+              ${showNetwork?"Masquer le réseau":"Voir le réseau"}</button></span></div>
+        <div class="rpg-board" style="grid-template-columns:repeat(${BOARD_COLUMNS},minmax(0,1fr));grid-template-rows:repeat(${BOARD_ROWS},minmax(0,1fr))"
+          aria-label="Terrain tactique, ${BOARD_COLUMNS} colonnes et ${BOARD_ROWS} lignes">
           ${cells.join("")}
           <svg class="rpg-threads" viewBox="0 0 ${BOARD_COLUMNS*100} ${BOARD_ROWS*100}" preserveAspectRatio="none" aria-hidden="true">
-            ${network}${enemyWires}${threat}${energy}${aim}${battle.guard>0
+            ${network}${energy}${aim}${battle.guard>0
             ?`<circle class="rpg-shield-field" cx="${pos(findModule(battle.player,"p-source")!.position).x}"
                cy="${pos(findModule(battle.player,"p-source")!.position).y}" r="135"/>`:""}${enemyFX}
           </svg>
@@ -302,7 +319,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
           <span class="rpg-eyebrow">UNITÉ · TOUCHES 1–3</span>
           <div class="rpg-hero-switch">${battle.player.filter(u=>u.role!=="source").map((u,i)=>
             `<button type="button" data-actor="${u.id}" class="${actorId===u.id?"active":""}">${i+1} ${u.operator}
-                <small>${u.energy}⚡</small></button>`).join("")}</div>
+                <small>⚡ ${accessibleFlux(u.id)} disponible</small></button>`).join("")}</div>
         </div>
         <div class="rpg-orders">
           <span class="rpg-eyebrow">ACTION · TOUCHES 4–9</span>
@@ -331,7 +348,8 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       return `<div class="rpg-help-backdrop"><section class="rpg-help" role="dialog" aria-modal="true" aria-label="Contrôles du combat">
         <h2>Le réseau de Flux</h2>
         <p>Une action puise automatiquement dans la réserve de son utilisateur, les alliés reliés, puis le générateur.</p>
-        <p><strong>Traits cyan :</strong> Flux connecté. <strong>Traits orange :</strong> liaison coupée. Le trajet actif est éclairé lorsqu'une action est choisie.</p>
+        <p><strong>⚡ Disponible</strong> sur une unité représente tout le Flux qu'elle peut emprunter au réseau, et pas seulement sa réserve personnelle. Tous les alliés ont accès à l'énergie dès le début du combat.</p>
+        <p><strong>Voir le réseau :</strong> affiche les liaisons cyan connectées et les liaisons orange coupées. Les trajets d'action n'apparaissent que lors du choix d'une commande ou d'une cible.</p>
         <p>Les opérateurs conservent leurs réserves entre les cycles. Lyrius peut améliorer la production du générateur. Les obstacles et brouilleurs peuvent isoler une unité.</p>
         <p><strong>Production :</strong> le générateur fabrique ${fluxPerSecond(battle)} Flux chaque seconde, sans attendre l'attaque ennemie.</p>
         <p><strong>Compétences :</strong> Kumji perce les défenses, Darla invoque un dôme, Lyrius envoie une impulsion EMP.</p>
@@ -373,10 +391,13 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
           ${battlefield()}
           ${recap()}
           ${commands()}
-          <div class="rpg-hint">Sélectionnez une unité ou une cible sur le terrain · Le Flux circule automatiquement.</div>
+          <div class="rpg-hint">⚡ Disponible = réserve personnelle + Flux accessible par les relais · Choisissez une action pour voir son trajet.</div>
           ${warning?`<div class="rpg-warning" role="alert">${escapeHtml(warning)}</div>`:""}
         </div>${overlay()}
       </main>`);
+      root.querySelectorAll<HTMLButtonElement>("[data-network]").forEach(b=>b.addEventListener("click",()=>{
+        showNetwork=!showNetwork;render();
+      }));
       root.querySelectorAll<HTMLButtonElement>("[data-pos]").forEach(b=>b.addEventListener("click",()=>{
         const [col,row]=b.dataset.pos!.split(",").map(Number);
         selectTile({col,row});
