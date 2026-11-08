@@ -234,7 +234,7 @@ function feed(state: BattleState, actorId: string, cost: number): FluxPlan {
     " PV. "+actor.operator+" doit conserver au moins 1 PV."};
   return {...partial,ok:true,hpCost};
 }
-function fluxSummary(state: BattleState, plan: FluxPlan, actorId: string): string {
+function fluxSummary(state: BattleState, plan: FluxPlan, _actorId: string): string {
   if (!plan.ok) return plan.reason;
   const unitName=(id:string)=>findModule(state.player,id)?.operator??id;
   const sources=plan.donors.map(part=>
