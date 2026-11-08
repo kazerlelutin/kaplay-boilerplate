@@ -6,7 +6,9 @@ export type BattlePhase = "allocation" | "player" | "enemy" | "finished";
 export type Point = { col: number; row: number };
 export const BOARD_COLUMNS = 9;
 export const BOARD_ROWS = 5;
-export const OBSTACLES: readonly Point[] = [{ col: 4, row: 0 }, { col: 4, row: 4 }];
+export const OBSTACLES: readonly Point[] = [{ col: 4, row: 0 }, { col: 4, row: 4 }, { col: 5, row: 3 }];
+export const COVER: readonly Point[] = [{ col: 4, row: 2 }];
+export const JAMMERS: readonly Point[] = [{ col: 3, row: 3 }];
 export const SOURCE_CAPACITY = 12;
 export const UNIT_CAPACITY = 9;
 
@@ -18,7 +20,7 @@ export interface BattleModule {
 export interface BattleEvent {
   text: string;
   kind: "flux" | "attack" | "guard" | "repair" | "move" | "turn" | "warning";
-  target?: string; amount?: number;
+  target?: string; amount?: number; from?: Point; to?: Point;
 }
 export interface BattleState {
   kind: BattleKind;
@@ -30,6 +32,7 @@ export interface BattleState {
   integrity: number; maxIntegrity: number;
   guard: number;
   victoryMode?: "neutralize" | "shutdown";
+  productionBoost: number;
   player: BattleModule[];
   enemy: BattleModule[];
   log: string[];
@@ -47,6 +50,7 @@ export type BattleAction =
   | { type: "neutralize" }
   | { type: "attack" | "cut" | "repair"; target: string; power: number }
   | { type: "guard"; power: number }
+  | { type: "tune" }
   | { type: "move"; actor: string; to: Point };
 
 export interface ActionPreview {
@@ -70,7 +74,7 @@ function module(id: string, name: string, operator: string, role: ModuleRole, hp
 
 export function createBattle(kind: BattleKind): BattleState {
   const state: BattleState = {
-    kind, round: 1, phase: "allocation", status: "active", flux: 6, maxFlux: SOURCE_CAPACITY,
+    kind, round: 1, phase: "allocation", status: "active", flux: 6, maxFlux: SOURCE_CAPACITY, productionBoost: 0,
     enemyFlux: 6, integrity: kind === "training" ? 12 : 16, maxIntegrity: kind === "training" ? 12 : 16,
     guard: 0, player: [
       module("p-weapon", "Lame", "Kumji", "weapon", 6, 2, 2),
@@ -95,6 +99,38 @@ export function findModule(modules: BattleModule[], id: string): BattleModule | 
 export function distance(a: Point, b: Point): number {
   return Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
 }
+export function moveCost(from: Point, to: Point): number | null {
+  const dx = Math.abs(from.col - to.col), dy = Math.abs(from.row - to.row);
+  if ((!dx && !dy) || dx > 1 || dy > 1) return null;
+  return dx && dy ? 2 : 1;
+}
+const same = (a: Point, b: Point): boolean => a.col === b.col && a.row === b.row;
+/** Bresenham : tracé des cases traversées pour tirs et liaisons. */
+export function rayTiles(from: Point, to: Point): Point[] {
+  let x = from.col, y = from.row;
+  const dx = Math.abs(to.col-x), dy = Math.abs(to.row-y);
+  const sx = x < to.col ? 1 : -1, sy = y < to.row ? 1 : -1;
+  let err = dx-dy;
+  const path: Point[] = [];
+  while (x !== to.col || y !== to.row) {
+    const doubled = 2*err;
+    if (doubled > -dy) { err -= dy; x += sx; }
+    if (doubled < dx) { err += dx; y += sy; }
+    path.push({col:x,row:y});
+  }
+  return path;
+}
+export function lineBlocked(from: Point, to: Point, signal = false): boolean {
+  return rayTiles(from,to).slice(0,-1).some((tile) =>
+    OBSTACLES.some((rock) => same(rock,tile))
+    || (signal && JAMMERS.some((jammer) => same(jammer,tile))));
+}
+export function canTransmit(from: Point, to: Point): boolean {
+  return distance(from,to) <= 4 && !lineBlocked(from,to,true);
+}
+export function terrainCover(from: Point, to: Point): number {
+  return rayTiles(from,to).slice(0,-1).some((tile)=>COVER.some((cover)=>same(cover,tile))) ? 1 : 0;
+}
 export function isBoardCellFree(state: BattleState, to: Point): boolean {
   return to.col >= 0 && to.row >= 0 && to.col < BOARD_COLUMNS && to.row < BOARD_ROWS
     && !OBSTACLES.some((tile) => distance(tile, to) === 0)
@@ -102,7 +138,7 @@ export function isBoardCellFree(state: BattleState, to: Point): boolean {
 }
 export function getFluxEconomy(state: BattleState): { produced: number; upkeep: number; available: number; sourceHp: number } {
   const sourceHp = findModule(state.player, "p-source")?.hp ?? 0;
-  const produced = sourceHp > 0 ? 4 + sourceHp : 0;
+  const produced = sourceHp > 0 ? 4 + sourceHp + state.productionBoost : 0;
   const upkeep = state.player.filter((unit) => unit.role !== "source" && unit.hp > 0).length;
   return { produced, upkeep, available: Math.max(0, produced - upkeep), sourceHp };
 }
@@ -126,11 +162,12 @@ export function enemySourceExposed(state: BattleState): boolean {
     && findModule(state.enemy, "e-relay")?.hp === 0;
 }
 
-function note(state: BattleState, text: string, kind: BattleEvent["kind"], target?: string, amount?: number): void {
-  state.log = [...state.log, text].slice(-10);
-  state.events.push({ text, kind, target, amount });
-  state.events = state.events.slice(-5);
+function note(state: BattleState, text: string, kind: BattleEvent["kind"], target?: string, amount?: number, from?: Point, to?: Point): void {
+  state.log = [...state.log,text].slice(-10);
+  state.events.push({text,kind,target,amount,from,to});
+  state.events = state.events.slice(-12);
 }
+
 function preview(state: BattleState, title: string, cost: number, description: string, reason = "", extras: Partial<ActionPreview> = {}): ActionPreview {
   return { ok: reason === "", title, description, reason, cost, fluxAfter: state.flux, ...extras };
 }
@@ -151,10 +188,12 @@ export function getEnemyIntent(state: BattleState): EnemyIntent {
   const target = targets.find((unit) => unit.id === "p-source")
     ?? targets.filter((unit) => unit.role !== "source").sort((a, b) => distance(a.position, weapon.position) - distance(b.position, weapon.position))[0];
   if (!target) return { kind: "idle", description: "Aucune cible à portée.", power: 0, damage: 0, absorbed: 0, netDamage: 0 };
-  const spendable = weapon.energy + Math.min(state.enemyFlux, weapon.maxEnergy - weapon.energy);
+  const inNetwork = canTransmit(enemySource.position, weapon.position);
+  const spendable = weapon.energy + (inNetwork ? Math.min(state.enemyFlux, weapon.maxEnergy - weapon.energy) : 0);
   if (spendable < 2) return { kind: "idle", description: "L'ennemi doit recharger son émetteur.", power: 0, damage: 0, absorbed: 0, netDamage: 0 };
   const power = Math.min(spendable, findModule(state.enemy, "e-barrier")!.hp === 0 ? 4 : 3);
-  const damage = power + 1;
+  const obstructed = lineBlocked(weapon.position, target.position);
+  const damage = obstructed ? 0 : Math.max(1, power + 1 - terrainCover(weapon.position, target.position));
   const absorbed = target.id === "p-source" && sourceProtected(state)
     ? Math.min(damage, 1 + state.guard) : 0;
   const netDamage = Math.max(0, damage - absorbed);
@@ -193,6 +232,8 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
     const reason = state.phase !== "allocation" ? "Ouvrez d'abord la distribution."
       : !isPositiveInteger(action.amount) ? "Montant invalide."
       : target.hp === 0 ? "Module hors service."
+      : !canTransmit(findModule(state.player,"p-source")!.position,target.position)
+        ? "Liaison coupée ou trop longue : portée 4, évitez les obstacles/brouilleurs."
       : action.amount > state.flux ? "Pas assez de Flux dans la cellule."
       : target.energy + action.amount > target.maxEnergy ? "Réserve du module pleine (9 max)." : "";
     return preview(state, `Alimenter ${target.operator}`, 0,
@@ -208,7 +249,8 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
     const reason = state.phase !== "player" ? "Les transferts s'effectuent pendant les ordres."
       : !isPositiveInteger(action.amount) ? "Montant invalide."
       : from.hp === 0 || to.hp === 0 ? "Module hors service."
-      : d > 3 ? "Les deux opérateurs doivent être à 3 cases maximum."
+      : d > 3 || lineBlocked(from.position,to.position,true)
+        ? "Transfert hors portée ou brouillé par un obstacle."
       : from.energy < action.amount ? "Le donneur n'a pas assez de Flux."
       : to.energy + action.amount > to.maxEnergy ? "Réserve du destinataire pleine (9 max)." : "";
     return preview(state, `${from.operator} → ${to.operator}`, 0,
@@ -220,13 +262,16 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   if (action.type === "move") {
     const unit = findModule(state.player, action.actor);
     if (!unit || unit.role === "source") return preview(state, "Déplacement", 1, "", "Choisissez un opérateur.");
-    const d = distance(unit.position, action.to);
-    const reason = unit.hp === 0 ? "Module hors service."
-      : unit.energy < 1 ? `${unit.operator} doit recevoir au moins 1⚡.`
-      : d !== 1 ? "Une seule case orthogonale par déplacement."
-      : !isBoardCellFree(state, action.to) ? "Case occupée ou inaccessible." : "";
-    return preview(state, `Déplacer ${unit.operator}`, 1, "Avancer d'une case.", reason,
-      { source: unit.id, distance: d, range: 1, energyAfter: unit.energy - 1 });
+    const cost = moveCost(unit.position,action.to);
+    const corner = cost === 2 && (!isBoardCellFree(state,{col:action.to.col,row:unit.position.row})
+      || !isBoardCellFree(state,{col:unit.position.col,row:action.to.row}));
+    const reason = unit.hp <= 0 ? "Module hors service."
+      : cost === null ? "Une case à la fois, diagonales autorisées."
+      : !isBoardCellFree(state,action.to) || corner ? "Passage bloqué."
+      : unit.energy < cost ? `${unit.operator} a besoin de ${cost} Flux.` : "";
+    return preview(state,`Déplacer ${unit.operator}`,cost ?? 1,
+      cost === 2 ? "Diagonale (2 Flux)." : "Case orthogonale (1 Flux).",
+      reason,{source:unit.id,energyAfter:unit.energy-(cost??1)});
   }
   if (action.type === "neutralize") {
     const unit = findModule(state.player, "p-support")!;
@@ -239,6 +284,18 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
       : unit.energy < 2 ? "Donnez 2⚡ à Lyrius pour neutraliser." : "";
     return preview(state, "Neutraliser", 2, "Couper le réseau sans détruire son noyau.", reason,
       { source: unit.id, distance: d, range: 5, energyAfter: unit.energy - 2 });
+  }
+  if (action.type === "tune") {
+    const engineer = findModule(state.player, "p-support")!;
+    const cell = findModule(state.player, "p-source")!;
+    const reason = engineer.hp === 0 ? "Lyrius hors service."
+      : cell.hp === 0 ? "Cellule hors service."
+      : state.productionBoost >= 3 ? "Production maximale atteinte (+3)."
+      : distance(engineer.position, cell.position) > 3 ? "Lyrius doit rester à trois cases de la cellule."
+      : engineer.energy < 3 ? "Attribuez 3 Flux à Lyrius." : "";
+    return preview(state, "Optimiser le générateur", 3,
+      "Investir 3 Flux pour +1 Flux à chaque cycle. Niveau actuel " + state.productionBoost + "/3.",
+      reason, {source:engineer.id, target:cell.id, energyAfter:engineer.energy-3});
   }
   if (action.type === "guard") {
     const unit = findModule(state.player, "p-barrier")!;
@@ -263,6 +320,10 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
     : actor.energy < action.power ? `${actor.operator} : ${actor.energy}⚡ disponibles pour ${action.power} requis.`
     : target.hp === 0 ? "Cible hors service."
     : d > range ? `Hors portée : ${d}/${range} cases.`
+    : !isRepair && lineBlocked(actor.position,target.position)
+      ? "Un obstacle bloque la ligne de tir."
+    : !isRepair && action.type === "cut" && lineBlocked(actor.position,target.position,true)
+      ? "Le brouilleur bloque la transmission."
     : isRepair && target.hp >= target.maxHp ? "Cible intacte."
     : !isRepair && target.role === "source" && !enemySourceExposed(state)
       ? "Noyau protégé : coupez d'abord l'écran ET le relais adverses."
@@ -270,7 +331,9 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   const shield = !isRepair && action.type === "attack" && target.role !== "barrier"
     && findModule(state.enemy, "e-barrier")!.hp > 0 ? 1 : 0;
   const power = action.power;
-  const damage = isRepair ? -(Math.ceil(power / 2)) : action.type === "cut" ? power - 1 : Math.max(1, power + 1 - shield);
+  const cover = !isRepair && action.type === "attack" ? terrainCover(actor.position,target.position) : 0;
+  const damage = isRepair ? -(Math.ceil(power / 2)) : action.type === "cut" ? power - 1
+    : Math.max(1,power+1-shield-cover);
   const after = Math.max(0, Math.min(target.maxHp, target.hp - damage));
   return preview(state,
     `${isRepair ? "Réparer" : action.type === "cut" ? "Couper le Flux de" : "Frapper"} ${target.name}`,
@@ -282,6 +345,8 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
 export type ActionResult = { ok: true } | { ok: false; reason: string };
 
 function giveEnemy(state: BattleState, unit: BattleModule, amount: number): number {
+  const core = findModule(state.enemy,"e-source")!;
+  if (!canTransmit(core.position,unit.position)) return 0;
   const given = Math.max(0, Math.min(amount, state.enemyFlux, unit.maxEnergy - unit.energy));
   state.enemyFlux -= given;
   unit.energy += given;
@@ -289,12 +354,59 @@ function giveEnemy(state: BattleState, unit: BattleModule, amount: number): numb
   return given;
 }
 
+/** Déplacement tactique vers la cellule, une case par cycle, coûté en énergie. */
+export function enemyMove(state: BattleState): Point | null {
+  const weapon = findModule(state.enemy,"e-weapon")!;
+  const source = findModule(state.player,"p-source")!;
+  if (weapon.hp === 0 || distance(weapon.position,source.position) <= 2) return null;
+  const before = distance(weapon.position,source.position);
+  const options: {p:Point; cost:number; score:number}[] = [];
+  for (const dx of [-1,0,1]) for (const dy of [-1,0,1]) {
+    const p = {col:weapon.position.col+dx,row:weapon.position.row+dy};
+    const cost = moveCost(weapon.position,p);
+    if (cost === null || !isBoardCellFree(state,p)) continue;
+    if (cost === 2 && (!isBoardCellFree(state,{col:p.col,row:weapon.position.row})
+      || !isBoardCellFree(state,{col:weapon.position.col,row:p.row}))) continue;
+    const remaining = distance(p,source.position);
+    if (remaining >= before) continue;
+    if (!canTransmit(findModule(state.enemy,"e-source")!.position,p) && weapon.energy < 3) continue;
+    options.push({p,cost,score:remaining*10+cost+(lineBlocked(p,source.position)?7:0)});
+  }
+  options.sort((a,b)=>a.score-b.score);
+  return options[0]?.p ?? null;
+}
+
+/** Impulsion de simulation : riposte puis nouvelle production, avec réserves persistantes. */
+export function advanceRealtimeCycle(state: BattleState): boolean {
+  if (state.status !== "active") return false;
+  if (state.phase === "allocation") performAction(state,{type:"orders"});
+  if (state.phase !== "player") return false;
+  if (!performAction(state,{type:"end"}).ok) return false;
+  if (state.status === "active") {
+    performAction(state,{type:"next"});
+    performAction(state,{type:"orders"});
+  }
+  return true;
+}
+
 function executeEnemy(state: BattleState): void {
   const weapon = findModule(state.enemy, "e-weapon")!;
   const relay = findModule(state.enemy, "e-relay")!;
   const enemySource = findModule(state.enemy, "e-source")!;
-  const plan = getEnemyIntent(state);
   const eventsStart = state.events.length;
+  const destination = enemyMove(state);
+  if (destination) {
+    const before = {...weapon.position};
+    const cost = moveCost(before,destination)!;
+    if (weapon.energy < cost) giveEnemy(state,weapon,cost-weapon.energy);
+    if (weapon.energy >= cost) {
+      weapon.energy -= cost;
+      weapon.position = {...destination};
+      note(state,"Sentinelle avance : -"+cost+" Flux, case ("+(destination.col+1)+","+(destination.row+1)+").",
+        "move",weapon.id,cost,before,destination);
+    }
+  }
+  const plan = getEnemyIntent(state);
 
   // Réaction : un relais encore actif répare le noyau si le joueur a percé son écran.
   if (enemySource.hp > 0 && enemySource.hp < enemySource.maxHp && relay.hp > 0) {
@@ -386,12 +498,19 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
   }
   state.events = [];
   if (action.type === "move") {
-    const unit = findModule(state.player, action.actor)!;
-    unit.energy -= 1;
-    unit.position = { ...action.to };
-    note(state, `${unit.operator} se déplace (−1⚡, reste ${unit.energy}).`, "move", unit.id);
+    const unit = findModule(state.player,action.actor)!;
+    const cost = moveCost(unit.position,action.to)!;
+    const from = {...unit.position};
+    unit.energy -= cost;
+    unit.position = {...action.to};
+    note(state,`${unit.operator} avance (${cost} Flux, reste ${unit.energy}).`,"move",unit.id,cost,from,{...action.to});
+  } else if (action.type === "tune") {
+    const engineer = findModule(state.player,"p-support")!;
+    engineer.energy -= 3;
+    state.productionBoost += 1;
+    note(state,`Générateur optimisé : +${state.productionBoost} Flux produit par cycle.`,"flux","p-source",state.productionBoost);
   } else if (action.type === "guard") {
-    const unit = findModule(state.player, "p-barrier")!;
+    const unit = findModule(state.player,"p-barrier")!;
     unit.energy -= action.power;
     state.guard += action.power * 2;
     note(state, `Darla fortifie la source (+${action.power * 2} protection, reste ${unit.energy}⚡).`, "guard", "p-source", action.power * 2);

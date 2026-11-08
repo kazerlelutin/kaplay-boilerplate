@@ -39,6 +39,16 @@ Sélectionnez le personnage sur le terrain, choisissez une commande et, si besoi
 **Portée** : distances horizontales/verticales sans diagonales ; Kumji attaque à 4 cases, Lyrius coupe le Flux à 5, répare à 3, transferts à 3. Un déplacement d'une case coûte 1 Flux stocké dans l'opérateur.
 
 
+## Expérimentation : temps réel avec pause tactique
+
+Le combat démarre en **pause tactique** : le joueur distribue le Flux et prépare ses actions. **▶ Lancer** démarre la simulation. Toutes les **3 secondes réelles**, le générateur produit à nouveau, les réserves sont conservées et l'ennemi se déplace ou attaque. **⏸ Pause** arrête instantanément la simulation pour répartir le Flux, attaquer ou réparer sans pression.
+
+Les déplacements diagonaux coûtent 2 Flux (contre 1 pour une case orthogonale). La sentinelle adverse avance dans la limite de ses réserves. Les **rochers** empêchent les passages et les tirs ; les **couvertures ▥** réduisent les dégâts ; les **brouilleurs ⌁** interrompent les transmissions de Flux. La distribution de la cellule porte à 4 cases sans obstacle.
+
+**Lyrius : Optimiser** dépense 3 Flux stockés pour ajouter durablement +1 à la production par cycle (jusqu'à +3). Cette amélioration ne crée pas d'énergie immédiatement, et la réserve de la cellule reste limitée à 12.
+
+Cette version hybride expérimente le rythme du combat : elle conserve les actions confirmées en pause, puis résout la production et la réponse adverse à intervalles réguliers. Les déplacements ennemis et certaines actions restent discrets par cycle et ne constituent pas encore des animations continues.
+
 ## Vérifications
 
 ```bash

@@ -315,3 +315,18 @@ canvas { display: block; image-rendering: pixelated; }
 .flow-actor-switch { display: flex; flex-wrap: wrap; gap: 4px; }
 .flow-actor-switch button { border: 1px solid #607e7a; color: #d6eee5; background: #30494c; padding: 5px 8px; font-size: 10px; }
 .flow-actor-switch button.selected { background: #4c6c55; color: #ffe4a0; border-color: #ebc77a; }
+
+/* Temps réel avec pause tactique, obstacles lisibles et barres de vie renforcées. */
+.flow-run-toggle { border: 2px solid #b0e5c4; background: #23664f; color: #edfff0; padding: 9px 13px; font-weight: bold; font-size: 12px; cursor: pointer; }
+.flow-run-toggle:hover { background: #38886f; }
+.flow-countdown { min-width: 53px; text-align: center; font-size: 11px; color: #dbeecf; }
+.flow-live { background: #274640; border-color: #79d5b6; }
+.flow-live > strong { color: #d0f7df; }
+.flow-tile.cover { background: #426255; box-shadow: inset 0 0 0 2px #698b75; }
+.flow-tile.jammer { background: #4b3d65; box-shadow: inset 0 0 0 2px #ae86d0; }
+.flow-terrain { font-size: clamp(14px,2vw,26px); font-weight: bold; color: #d3cdea; }
+.flow-tile.cover .flow-terrain { color: #d4ebaf; }
+.arena-hp { height: 9px; border: 1px solid #e6dfc9; width: 95%; border-radius: 2px; box-shadow: 0 1px 2px #000b; }
+.arena-hp i { background: #75e6a3; }
+.arena-token.foe .arena-hp i { background: #ff927e; }
+.arena-token.core .arena-hp i { background: #ffd476; }

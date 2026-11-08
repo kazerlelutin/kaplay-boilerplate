@@ -43,3 +43,29 @@ Fonctionnalité: Réseau de Flux — allocation, réserves et ripostes
     Alors l'adversaire peut transférer du Flux vers son relais
     Et il peut reconstruire l'émetteur
     Et l'action ennemie devient visible dans le terrain et son récapitulatif
+
+  Scénario: Suspendre le temps pour préparer ses ordres
+    Étant donné une simulation de combat active
+    Quand le joueur met en pause
+    Alors aucun cycle de production ou de riposte ne progresse
+    Et les réserves des unités restent modifiables
+
+  Scénario: Laisser tourner une impulsion de simulation
+    Étant donné une unité avec trois unités de Flux stockées
+    Quand un cycle de trois secondes est résolu
+    Alors le générateur produit du nouveau Flux dans sa réserve
+    Et l'ennemi peut se déplacer et attaquer
+    Et l'unité conserve ses trois unités si elle ne les utilise pas
+
+  Scénario: Investir dans le générateur
+    Étant donné Lyrius à portée de la cellule avec trois unités de Flux
+    Quand il optimise le générateur
+    Alors sa réserve diminue de trois
+    Et les productions suivantes augmentent de un Flux
+
+  Scénario: Terrain, diagonal et transmissions
+    Étant donné un terrain comportant rochers couvertures et brouilleurs
+    Quand une unité se déplace en diagonale
+    Alors le déplacement coûte deux unités de Flux
+    Et un rocher bloque le mouvement et les tirs
+    Et un brouilleur coupe la transmission énergétique

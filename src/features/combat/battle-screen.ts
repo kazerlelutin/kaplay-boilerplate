@@ -236,7 +236,7 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
           ${choices.map((name) => `<button type="button" data-order="${name}" class="${order === name ? "chosen" : ""}">${TITLES[name]}</button>`).join("")}
         </div>
         ${previewPanel()}
-        <button type="button" data-end class="flow-end">Fin du tour →</button>
+        <button type="button" data-end class="flow-end">▶ Lancer la simulation</button>
       </section>`;
     }
 
