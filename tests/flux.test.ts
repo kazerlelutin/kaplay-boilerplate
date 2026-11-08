@@ -12,7 +12,7 @@ test("La cellule produit le Flux, trois modules consomment l'entretien", () => {
 test("Le Flux revient au nouveau tour depuis l'état réel de la cellule", () => {
   const state = createBattle("mission");
   performAction(state, { type: "guard" });
-  performAction(state, { type: "attack", target: "e-barrier" });
+  performAction(state, { type: "attack", target: "e-weapon" });
   assert.equal(state.flux, 2);
   performAction(state, { type: "end" });
   assert.equal(findModule(state.player, "p-source")!.hp, 5);

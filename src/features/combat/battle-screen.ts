@@ -48,6 +48,7 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
     let targetTile: Point | null = null;
     let warning = "";
     let help = false;
+    let lastRiposte = "";
     let exiting = false;
     const source = () => findModule(battle.player, "p-source")!;
     const actor = () => findModule(battle.player, actorId)!;
@@ -196,7 +197,7 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
             <button type="button" class="lite-help-button" data-help aria-label="Comprendre le Flux">?</button>
           </header>
           ${battlefield()}
-          <div class="lite-danger"><span class="lite-danger-icon">!</span><span>${e(attack.description)}</span>
+          <div class="lite-danger"><span class="lite-danger-icon">!</span><span>${e(myTurn ? attack.description : lastRiposte)}</span>
             <small>${myTurn ? "Prochaine riposte" : "Résultat de la riposte"} · Source ${source().hp}/${source().maxHp} PV</small></div>
           ${control}
           ${warning ? `<div class="lite-toast" role="status">${e(warning)}</div>` : ""}
@@ -209,7 +210,11 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
           if (!myTurn) return;
           const point = { col: Number(button.dataset.x), row: Number(button.dataset.y) };
           const unit = [...battle.player, ...battle.enemy].find((candidate) => distance(candidate.position, point) === 0);
-          if (unit?.id.startsWith("e-")) targetEnemy = unit.id;
+          if (unit?.id.startsWith("e-")) {
+            targetEnemy = unit.id;
+            if (actorId === "p-weapon") order = "attack";
+            if (actorId === "p-support") order = "cut";
+          }
           else if (unit?.id === "p-source") {
             actorId = "p-support";
             order = "repair";
@@ -245,6 +250,7 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
         render();
       });
       root.querySelector<HTMLButtonElement>("[data-end]")?.addEventListener("click", () => {
+        lastRiposte = getEnemyIntent(battle).description;
         performAction(battle, { type: "end" });
         render();
       });
