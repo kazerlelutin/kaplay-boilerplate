@@ -1,10 +1,10 @@
 import type { KAPLAYCtx } from "kaplay";
 import type { GameSession } from "../../game/session";
 import {
-  BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, UNIT_CAPACITY,
+  BOARD_COLUMNS, BOARD_ROWS, OBSTACLES,
   createBattle, distance, enemySourceExposed, findModule,
   getEnemyIntent, getFluxEconomy, isBoardCellFree,
-  performAction, previewAction, sourceProtected,
+  performAction, previewAction,
   type BattleAction, type BattleEvent, type BattleModule, type Point,
 } from "./domain/battle";
 import { completeBattle } from "./finish";
@@ -227,7 +227,10 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
     function actionPanel(): string {
       const choices = ACTIONS[actorId];
       return `<section class="flow-actions" aria-label="Actions">
-        <div class="flow-actor-title"><span>ÉTAPE 2 / 2</span><strong>${esc(actor().operator)} <em>${actor().energy}⚡ en réserve</em></strong>
+        <div class="flow-actor-title"><span>ÉTAPE 2 / 2</span>
+          <div class="flow-actor-switch">${battle.player.filter((unit) => unit.role !== "source").map((unit) =>
+            `<button type="button" data-actor="${unit.id}" class="${actorId === unit.id ? "selected" : ""}" aria-pressed="${actorId === unit.id}">${esc(unit.operator)}</button>`).join("")}</div>
+          <strong>${esc(actor().operator)} <em>${actor().energy}⚡ en réserve</em></strong>
           <button type="button" data-redistribute>Distribuer du Flux</button></div>
         <div class="flow-action-choices">
           ${choices.map((name) => `<button type="button" data-order="${name}" class="${order === name ? "chosen" : ""}">${TITLES[name]}</button>`).join("")}
@@ -320,6 +323,10 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
         performAction(battle,{type:"redistribute"});
         render();
       });
+      root.querySelectorAll<HTMLButtonElement>("[data-actor]").forEach((button) => button.addEventListener("click",() => {
+        pickActor(button.dataset.actor!);
+        render();
+      }));
       root.querySelectorAll<HTMLButtonElement>("[data-order]").forEach((button) => button.addEventListener("click",() => {
         order = button.dataset.order as Order;
         if (order === "transfer") {

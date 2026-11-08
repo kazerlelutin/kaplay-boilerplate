@@ -40,7 +40,11 @@ export interface BattleState {
 export type BattleAction =
   | { type: "allocate"; target: string; amount: number }
   | { type: "transfer"; from: string; target: string; amount: number }
-  | { type: "orders" | "redistribute" | "end" | "next" | "neutralize" }
+  | { type: "orders" }
+  | { type: "redistribute" }
+  | { type: "end" }
+  | { type: "next" }
+  | { type: "neutralize" }
   | { type: "attack" | "cut" | "repair"; target: string; power: number }
   | { type: "guard"; power: number }
   | { type: "move"; actor: string; to: Point };
@@ -138,14 +142,12 @@ export function getEnemyIntent(state: BattleState): EnemyIntent {
   const weapon = findModule(state.enemy, "e-weapon")!;
   const relay = findModule(state.enemy, "e-relay")!;
   const enemySource = findModule(state.enemy, "e-source")!;
-  const source = findModule(state.player, "p-source")!;
   if (enemySource.hp === 0) return { kind: "idle", description: "Noyau adverse hors service.", power: 0, damage: 0, absorbed: 0, netDamage: 0 };
   if (weapon.hp === 0) {
     if (relay.hp > 0) return { kind: "repair", description: "Le relais tentera de reconstruire l'émetteur (2 Flux).", power: 2, damage: 0, absorbed: 0, netDamage: 0 };
     return { kind: "idle", description: "Arme et relais coupés : aucune riposte possible.", power: 0, damage: 0, absorbed: 0, netDamage: 0 };
   }
-  const targets = state.player.filter((unit) => unit.hp > 0
-    && (unit.role === "source" || unit.role !== "source") && distance(weapon.position, unit.position) <= 6);
+  const targets = state.player.filter((unit) => unit.hp > 0 && distance(weapon.position, unit.position) <= 6);
   const target = targets.find((unit) => unit.id === "p-source")
     ?? targets.filter((unit) => unit.role !== "source").sort((a, b) => distance(a.position, weapon.position) - distance(b.position, weapon.position))[0];
   if (!target) return { kind: "idle", description: "Aucune cible à portée.", power: 0, damage: 0, absorbed: 0, netDamage: 0 };

@@ -311,3 +311,7 @@ canvas { display: block; image-rendering: pixelated; }
   .flow-threat { flex-direction: column; align-items: flex-start; font-size: 10px; }
   .flow-help { top: 20px; right: 10px; }
 }
+
+.flow-actor-switch { display: flex; flex-wrap: wrap; gap: 4px; }
+.flow-actor-switch button { border: 1px solid #607e7a; color: #d6eee5; background: #30494c; padding: 5px 8px; font-size: 10px; }
+.flow-actor-switch button.selected { background: #4c6c55; color: #ffe4a0; border-color: #ebc77a; }
