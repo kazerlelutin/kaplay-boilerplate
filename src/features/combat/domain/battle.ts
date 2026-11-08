@@ -208,16 +208,40 @@ function note(state: BattleState, text: string, kind: BattleEvent["kind"], targe
 function preview(state: BattleState, title: string, cost: number, description: string, reason = "", extras: Partial<ActionPreview> = {}): ActionPreview {
   return { ok: reason === "", title, description, reason, cost, fluxAfter: state.flux, ...extras };
 }
+/**
+ * Le Flux est prioritaire. En dernier recours, 1 PV est sacrifié pour
+ * chaque unité de Flux manquante. L'acteur conserve toujours au moins 1 PV.
+ * La prévisualisation reste sans effet de bord.
+ */
 function feed(state: BattleState, actorId: string, cost: number): FluxPlan {
-  return planFlux(state,actorId,cost,(a,b)=>lineBlocked(a,b,true));
+  const blocked=(a:Point,b:Point)=>lineBlocked(a,b,true);
+  const full=planFlux(state,actorId,cost,blocked);
+  if (full.ok) return {...full,hpCost:0};
+  const actor=findModule(state.player,actorId);
+  if (!actor || actor.hp<=0 || !Number.isInteger(cost) || cost<=0) return full;
+
+  // Le plan de Flux incomplet est le plus grand financement valide.
+  let partial:FluxPlan={
+    ok:true,required:0,available:0,own:0,donors:[],reason:"",
+    connectedToSource:false,
+  };
+  for (let amount=cost-1;amount>=1;amount--) {
+    const candidate=planFlux(state,actorId,amount,blocked);
+    if (candidate.ok) {partial=candidate;break;}
+  }
+  const hpCost=cost-partial.required;
+  if (hpCost>=actor.hp) return {...full,reason:"Cette action demanderait "+hpCost+
+    " PV. "+actor.operator+" doit conserver au moins 1 PV."};
+  return {...partial,ok:true,hpCost};
 }
 function fluxSummary(state: BattleState, plan: FluxPlan, actorId: string): string {
   if (!plan.ok) return plan.reason;
-  const unitName = (id:string) => findModule(state.player,id)?.operator ?? id;
-  if (!plan.donors.length) return "Réserve de "+unitName(actorId)+" : "+plan.own+"⚡.";
-  return plan.donors.map((part) =>
-    part.path.map(unitName).join(" → ")+" ("+part.amount+"⚡)").join(" · ")
-    +(plan.own ? " · Réserve propre : "+plan.own+"⚡" : "");
+  const unitName=(id:string)=>findModule(state.player,id)?.operator??id;
+  const sources=plan.donors.map(part=>
+    part.path.map(unitName).join(" → ")+" ("+part.amount+"⚡)").join(" · ");
+  const personal=plan.own?"Réserve personnelle : "+plan.own+"⚡":"";
+  const vitality=plan.hpCost?"⚠ "+plan.hpCost+" PV sacrifié(s) pour l'énergie manquante.":"";
+  return [sources,personal,vitality].filter(Boolean).join(" · ");
 }
 function isPositiveInteger(value: number): boolean {
   return Number.isInteger(value) && value >= 1;
@@ -631,7 +655,16 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
     : action.type === "attack" ? "p-weapon"
     : action.type === "guard" ? "p-barrier" : "p-support";
   if (p.fluxPlan) {
+    const activeUnit=findModule(state.player,powerUser)!;
+    const hpCost=p.fluxPlan.hpCost??0;
+    // Vérification avant la dépense de Flux : une action refusée ne coûte rien.
+    if (hpCost>=activeUnit.hp) return {ok:false,reason:"Il faut conserver au moins 1 PV."};
     if (!consumeFlux(state,powerUser,p.fluxPlan)) return {ok:false,reason:"Le réseau de Flux a changé. Réessayez l'action."};
+    if (hpCost>0) {
+      activeUnit.hp-=hpCost;
+      note(state,activeUnit.operator+" dépense "+hpCost+" PV pour alimenter son action.",
+        "warning",activeUnit.id,hpCost);
+    }
     state.lastFluxPath = p.fluxPlan.donors.flatMap(donor=>donor.path);
     for (const donor of p.fluxPlan.donors) {
       const from = findModule(state.player,donor.id)!;

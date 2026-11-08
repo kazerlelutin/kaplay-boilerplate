@@ -111,8 +111,10 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         render();
         return;
       }
+      const preview=previewAction(battle,selected);
       const result=performAction(battle,selected);
       warning=result.ok ? "" : result.reason;
+      if (result.ok && (preview.fluxPlan?.hpCost??0)>0) emitSound("special");
       emitSound(result.ok
         ? selected.type==="attack"?"hit":selected.type==="cut"?"cut"
           : selected.type==="guard"?"shield":selected.type==="repair"?"repair"
@@ -314,6 +316,8 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       const pathInfo=pre?.fluxPlan?.donors.map(d=>d.path.map(id=>lookup(id)?.operator??id).join(" → ")
         +" ("+d.amount+"⚡)").join(" · ");
       const needPower=["attack","cut","guard","repair"].includes(command);
+      const hpCost=pre?.ok ? (pre.fluxPlan?.hpCost??0) : 0;
+      const healthOwner=pre?.source?lookup(pre.source):undefined;
       return `<section class="rpg-toolbar">
         <div class="rpg-selection">
           <span class="rpg-eyebrow">UNITÉ · TOUCHES 1–3</span>
@@ -337,9 +341,12 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
           </div>
           <p>${escapeHtml(pre?.reason||pre?.description||"Choisissez une case libre.")}</p>
           ${pathInfo?`<small class="rpg-path">⚡ ${escapeHtml(pathInfo)}</small>`:""}
-          ${pre?.fluxPlan&&!pre.fluxPlan.ok?`<small class="rpg-broken">⛓ Liaison insuffisante ou rompue</small>`:""}
-          <button type="button" class="rpg-primary" data-confirm ${!pre?.ok?"disabled":""}>
-            Confirmer · Entrée</button>
+          ${hpCost>0?`<strong class="rpg-health-payment" role="status">
+            ♥ Énergie manquante : −${hpCost} PV · ${healthOwner?.hp??0} → ${(healthOwner?.hp??0)-hpCost} PV
+          </strong>`:""}
+          ${pre?.fluxPlan&&!pre.fluxPlan.ok?`<small class="rpg-broken">⛓ Flux insuffisant et sacrifice impossible</small>`:""}
+          <button type="button" class="rpg-primary ${hpCost>0?"rpg-health-confirm":""}" data-confirm ${!pre?.ok?"disabled":""}>
+            ${hpCost>0?`Confirmer : −${hpCost} PV · Entrée`:"Confirmer · Entrée"}</button>
         </div>
       </section>`;
     }
@@ -351,6 +358,9 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         <p><strong>⚡ Disponible</strong> sur une unité représente tout le Flux qu'elle peut emprunter au réseau, et pas seulement sa réserve personnelle. Tous les alliés ont accès à l'énergie dès le début du combat.</p>
         <p><strong>Voir le réseau :</strong> affiche les liaisons cyan connectées et les liaisons orange coupées. Les trajets d'action n'apparaissent que lors du choix d'une commande ou d'une cible.</p>
         <p>Les opérateurs conservent leurs réserves entre les cycles. Lyrius peut améliorer la production du générateur. Les obstacles et brouilleurs peuvent isoler une unité.</p>
+        <p><strong>Énergie de secours :</strong> quand les réserves et le réseau sont insuffisants,
+          un personnage peut sacrifier 1 PV pour chaque Flux manquant. La dernière unité de vie
+          ne peut pas être dépensée. Le coût est indiqué avant confirmation.</p>
         <p><strong>Production :</strong> le générateur fabrique ${fluxPerSecond(battle)} Flux chaque seconde, sans attendre l'attaque ennemie.</p>
         <p><strong>Compétences :</strong> Kumji perce les défenses, Darla invoque un dôme, Lyrius envoie une impulsion EMP.</p>
         <p><strong>Clavier :</strong> 1–3 personnages, 4–9 actions, flèches ou ZQSD mouvement, A/E/W/C diagonales, +/− puissance, Entrée ou double-clic confirmation, Espace pause/lancer.</p>

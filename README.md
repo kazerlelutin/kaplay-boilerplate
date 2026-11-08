@@ -84,3 +84,15 @@ docs/PROTOTYPE.md  # Périmètre, limites et prochaines itérations
 - L'équilibrage, le ressenti et les transitions visuelles nécessiteront des tests de jeu.
 
 Le document [docs/PROTOTYPE.md](docs/PROTOTYPE.md) conserve le périmètre et les étapes suivantes.
+
+## Déployer sur CapRover
+
+Le jeu est une application Vite statique : aucune API, base de données ou volume n'est nécessaire pour le prototype. Le `Dockerfile` multi-stage installe les dépendances avec Bun et construit `dist/`, puis NGINX sert exclusivement les fichiers de jeu sur le **port 80**. Le build ne contient pas les dépendances de développement.
+
+1. Dans **CapRover → Apps**, créer une application web (par exemple `the-dunblane-quest`) avec **Container HTTP Port = 80**.
+2. Dans **Deployment**, déployer la branche souhaitée depuis le dépôt Git ou utiliser la CLI `caprover deploy` après avoir configuré la connexion. Le fichier racine `captain-definition` indique à CapRover de construire l'image avec `./Dockerfile`.
+3. Configurer le domaine et HTTPS depuis **HTTP Settings**, puis vérifier `/healthz` (réponse `ok`).
+4. Pour un contrôle local : `docker build -t the-dunblane-quest .` puis `docker run --rm -p 8080:80 the-dunblane-quest`. Ouvrir `http://localhost:8080`.
+
+L'image sert une SPA avec retour vers `index.html` pour les routes d'application. Les assets versionnés de Vite sont cachés longtemps, tandis que l'HTML reste non mis en cache. **Aucune image n'est automatiquement publiée sur un registre** : CapRover peut la construire depuis le dépôt, ou elle peut être construite et publiée séparément si nécessaire.
+

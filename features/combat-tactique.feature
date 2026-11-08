@@ -134,3 +134,23 @@ Fonctionnalité: Réseau de Flux — allocation, réserves et ripostes
     Alors un bouclier visible couvre la cellule
     Quand Lyrius lance une impulsion EMP
     Alors l'énergie ennemie est drainée et ses réactions sont retardées
+
+  Scénario: Utiliser ses PV faute de Flux
+    Étant donné Kumji avec 6 PV et aucune énergie disponible dans le réseau
+    Quand il prévisualise une attaque de 3 Flux
+    Alors un sacrifice de 3 PV est annoncé
+    Et la prévisualisation ne modifie pas ses PV
+    Quand il confirme l'attaque
+    Alors Kumji conserve 3 PV
+    Et la cible reçoit les dégâts
+
+  Scénario: Consommer le Flux puis les PV
+    Étant donné Kumji avec 6 PV et 2 Flux accessibles
+    Quand il confirme une action coûtant 3 Flux
+    Alors 2 Flux sont consommés
+    Et Kumji perd 1 PV
+
+  Scénario: Ne jamais sacrifier son dernier PV
+    Étant donné Darla avec 1 PV et aucun Flux accessible
+    Quand elle tente un déplacement coûtant 1 Flux
+    Alors l'action est refusée sans modifier son état

@@ -486,3 +486,9 @@ canvas { display: block; image-rendering: pixelated; }
 .rpg-link {stroke-opacity:.55;}
 .rpg-link.broken {stroke-opacity:.75;}
 @media (max-width:650px) {.rpg-board {height:clamp(325px,49vh,520px);} .rpg-stage-label .rpg-stage-tools {gap:5px;} }
+
+/* Coût en PV du mode de secours, annoncé avant la confirmation. */
+.rpg-health-payment {display:block;padding:7px 10px;background:#613a39;border-left:3px solid #f09a91;
+  color:#ffd9d0;font-size:12px;line-height:1.4;}
+.rpg-health-confirm {background:#833b39;border-color:#f2a29a;}
+.rpg-health-confirm:not(:disabled):hover {background:#9c4a45;}

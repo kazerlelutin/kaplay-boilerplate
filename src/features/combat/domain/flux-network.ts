@@ -29,6 +29,8 @@ export interface FluxPlan {
   donors: FluxDonor[];
   reason: string;
   connectedToSource: boolean;
+  /** Cost in HP when an action is fueled by vitality rather than Flux. */
+  hpCost?: number;
 }
 export interface FluxLink {
   from: string;
