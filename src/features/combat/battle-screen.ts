@@ -2,7 +2,7 @@ import type { KAPLAYCtx } from "kaplay";
 import type { GameSession } from "../../game/session";
 import {
   BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, COVER, JAMMERS,
-  createBattle, advanceRealtimeCycle, distance, enemySourceExposed,
+  createBattle, advanceRealtimeCycle, distance, enemySourceExposed, produceFluxSecond, fluxPerSecond,
   findModule, getEnemyIntent, getFluxEconomy, isBoardCellFree, moveCost,
   performAction, previewAction,
   type BattleAction, type BattleEvent, type BattleModule, type Point,
@@ -11,16 +11,17 @@ import { visibleFluxLinks } from "./domain/flux-network";
 import { lineBlocked } from "./domain/battle";
 import { completeBattle } from "./finish";
 import { setScreen } from "../../shared/ui/screen";
+import { playCombatSound, type CombatSound } from "./audio";
 
-type Command = "attack" | "cut" | "guard" | "repair" | "tune" | "neutralize" | "move";
+type Command = "attack" | "cut" | "guard" | "repair" | "tune" | "neutralize" | "move" | "special";
 const COMMANDS: Record<string, Command[]> = {
-  "p-weapon": ["attack","move"],
-  "p-barrier": ["guard","move"],
-  "p-support": ["cut","repair","tune","neutralize","move"],
+  "p-weapon": ["attack","special","move"],
+  "p-barrier": ["guard","special","move"],
+  "p-support": ["cut","repair","tune","special","neutralize","move"],
 };
 const NAMES: Record<Command,string> = {
   attack:"Frapper",cut:"Coupe-flux",guard:"Bouclier",repair:"Réparer",
-  tune:"Optimiser",neutralize:"Neutraliser",move:"Déplacer",
+  tune:"Optimiser",neutralize:"Neutraliser",move:"Déplacer",special:"Coup spécial",
 };
 const ICONS: Record<string,string> = {
   "p-weapon":"K","p-barrier":"D","p-support":"L","p-source":"✦",
@@ -46,6 +47,9 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     let help = false;
     let running = false;
     let elapsed = 0;
+    let energyElapsed = 0;
+    let soundEnabled = true;
+    let lastTap: {key:string;at:number}|null = null;
     let feedbackFor = 0;
     let feedback:BattleEvent[] = [];
     let warning = "";
@@ -61,6 +65,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       if (command==="guard") return {type:"guard",power};
       if (command==="tune") return {type:"tune"};
       if (command==="neutralize") return {type:"neutralize"};
+      if (command==="special") return {type:"special",actor:actorId,target:enemyId};
       return destination ? {type:"move",actor:actorId,to:destination} : null;
     };
 
@@ -93,6 +98,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       warning="";
       render();
     }
+    function emitSound(kind:CombatSound):void {playCombatSound(kind,soundEnabled);}
     function confirm():void {
       if (running || battle.status!=="active") return;
       const selected=activeCommand();
@@ -103,6 +109,11 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       }
       const result=performAction(battle,selected);
       warning=result.ok ? "" : result.reason;
+      emitSound(result.ok
+        ? selected.type==="attack"?"hit":selected.type==="cut"?"cut"
+          : selected.type==="guard"?"shield":selected.type==="repair"?"repair"
+            : selected.type==="move"?"step":selected.type==="special"?"special":"charge"
+        : "error");
       if (result.ok) {
         feedback=battle.events.filter(e=>e.kind!=="turn").slice(-3);
         feedbackFor=2.4;
@@ -113,6 +124,16 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     function selectTile(p:Point):void {
       if (running || battle.status!=="active") return;
       const unit=[...battle.player,...battle.enemy].find(u=>distance(u.position,p)===0);
+      const key=p.col+","+p.row;
+      const now=performance.now();
+      const isTarget=unit?.id.startsWith("e-") || (command==="repair" && unit?.id.startsWith("p-"))
+        || !unit;
+      if (isTarget && lastTap?.key===key && now-lastTap.at<520) {
+        lastTap=null;
+        confirm();
+        return;
+      }
+      lastTap={key,at:now};
       if (unit?.id.startsWith("e-")) {
         enemyId=unit.id;
         if (actorId==="p-weapon") command="attack";
@@ -150,14 +171,20 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       const hp=Math.round(100*unit.hp/unit.maxHp);
       const isSource=unit.role==="source";
       const hit=effect?.target===unit.id;
+      const shield=mine && battle.guard>0 && (isSource || unit.id==="p-barrier");
+      const recovery=unit.hp===0 && unit.id.startsWith("e-") && unit.role!=="source"
+        ? (unit.recoveryWait>0?"⏳ "+unit.recoveryWait : unit.recoveryStage==="repaired"?"Réparé":"HS")
+        : "";
       const cue=hit ? (effect?.kind==="repair" ? "+" : effect?.kind==="flux" ? "⚡" : effect?.kind==="guard" ? "◆" : "−")
         +Math.abs(effect?.amount??0) : "";
       return `<span class="rpg-unit ${mine?"ally":"enemy"} ${isSource?"generator":""} ${unit.id===actorId?"selected":""}
-        ${unit.hp===0?"disabled":""} ${hit?"affected":""}">
+        ${unit.hp===0?"disabled":""} ${hit?"affected":""} ${shield?"shielded":""}">
         <b>${ICONS[unit.id]}</b><span class="rpg-unit-name">${escapeHtml(unit.operator)}</span>
         <span class="rpg-hp"><i style="width:${hp}%"></i></span>
         <small>${unit.hp}/${unit.maxHp} PV</small>
         <span class="rpg-energy">${isSource?(mine?battle.flux:battle.enemyFlux):unit.energy} ⚡</span>
+        ${shield?`<span class="rpg-shield-label">◆ ${battle.guard}</span>`:""}
+        ${recovery?`<span class="rpg-recovery">${recovery}</span>`:""}
         ${hit?`<span class="rpg-float">${cue}</span>`:""}
       </span>`;
     }
@@ -186,7 +213,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         return svgLine(core.position,unit.position,"rpg-enemy-link");
       }).join("");
       const recent=feedbackFor>0?feedback:[];
-      const enemyFX=recent.filter(e=>e.kind==="move"||e.kind==="attack")
+      const enemyFX=recent.filter(e=>e.kind==="move"||e.kind==="attack"||e.kind==="special")
         .map(event=>{
           const a=event.from??(event.kind==="attack"?findModule(battle.enemy,"e-weapon")?.position:undefined);
           const b=event.to??lookup(event.target??"")?.position;
@@ -194,6 +221,10 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
           const s=pos(a),d=pos(b);
           return `<line x1="${s.x}" y1="${s.y}" x2="${d.x}" y2="${d.y}" class="rpg-enemy-effect">
             <animate attributeName="stroke-dashoffset" from="85" to="0" dur=".85s" fill="freeze"/></line>
+            <circle cx="0" cy="0" r="12" class="rpg-projectile">
+              <animateMotion path="M ${s.x} ${s.y} L ${d.x} ${d.y}" dur=".65s" fill="freeze"/>
+              <animate attributeName="opacity" from="1" to="0" begin=".7s" dur=".15s" fill="freeze"/>
+            </circle>
             <circle cx="${d.x}" cy="${d.y}" r="14" class="rpg-impact">
               <animate attributeName="r" from="4" to="30" dur=".8s" fill="freeze"/>
               <animate attributeName="opacity" from="1" to="0" dur=".8s" fill="freeze"/></circle>`;
@@ -235,8 +266,10 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
           <span>ADVERSAIRES</span></div>
         <div class="rpg-board" aria-label="Terrain tactique et réseaux de Flux">
           ${cells.join("")}
-          <svg class="rpg-threads" viewBox="0 0 900 500" preserveAspectRatio="none" aria-hidden="true">
-            ${network}${enemyWires}${threat}${energy}${aim}${enemyFX}
+          <svg class="rpg-threads" viewBox="0 0 ${BOARD_COLUMNS*100} ${BOARD_ROWS*100}" preserveAspectRatio="none" aria-hidden="true">
+            ${network}${enemyWires}${threat}${energy}${aim}${battle.guard>0
+            ?`<circle class="rpg-shield-field" cx="${pos(findModule(battle.player,"p-source")!.position).x}"
+               cy="${pos(findModule(battle.player,"p-source")!.position).y}" r="135"/>`:""}${enemyFX}
           </svg>
         </div>
       </div>`;
@@ -255,7 +288,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     }
     function commands():string {
       if (running) return `<section class="rpg-toolbar live">
-        <span>La production et les ennemis agissent toutes les ${CYCLE_SECONDS} secondes.</span>
+        <span>Énergie +${fluxPerSecond(battle)}⚡ chaque seconde · ennemis toutes les ${CYCLE_SECONDS}s.</span>
         <button type="button" class="rpg-primary" data-pause>⏸ Pause tactique · Espace</button>
       </section>`;
       const choices=COMMANDS[actorId];
@@ -300,7 +333,9 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         <p>Une action puise automatiquement dans la réserve de son utilisateur, les alliés reliés, puis le générateur.</p>
         <p><strong>Traits cyan :</strong> Flux connecté. <strong>Traits orange :</strong> liaison coupée. Le trajet actif est éclairé lorsqu'une action est choisie.</p>
         <p>Les opérateurs conservent leurs réserves entre les cycles. Lyrius peut améliorer la production du générateur. Les obstacles et brouilleurs peuvent isoler une unité.</p>
-        <p><strong>Clavier :</strong> 1–3 choisir le personnage, 4–9 choisir une action, flèches ou ZQSD pour préparer un déplacement, A/E/W/C pour les diagonales, +/− pour la puissance, Entrée confirmer, Espace pause/lancer.</p>
+        <p><strong>Production :</strong> le générateur fabrique ${fluxPerSecond(battle)} Flux chaque seconde, sans attendre l'attaque ennemie.</p>
+        <p><strong>Compétences :</strong> Kumji perce les défenses, Darla invoque un dôme, Lyrius envoie une impulsion EMP.</p>
+        <p><strong>Clavier :</strong> 1–3 personnages, 4–9 actions, flèches ou ZQSD mouvement, A/E/W/C diagonales, +/− puissance, Entrée ou double-clic confirmation, Espace pause/lancer.</p>
         <button type="button" class="rpg-primary" data-help>Fermer · Échap</button>
       </section></div>`;
     }
@@ -327,10 +362,12 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
             <div><span class="rpg-eyebrow">THE DUNBLANE QUEST · COMBAT</span>
               <strong>${running?"SIMULATION":"PAUSE TACTIQUE"} · CYCLE ${battle.round}</strong></div>
             <div class="rpg-header-stats">
-              <span class="rpg-flux">✦ ${battle.flux}⚡ <small>+${economy.available}/cycle</small></span>
+              <span class="rpg-flux">✦ ${battle.flux}⚡ <small>+${fluxPerSecond(battle)}/seconde</small></span>
               <span>◆ ${battle.guard}</span>
               <span id="rpg-clock">${running?Math.ceil(CYCLE_SECONDS-elapsed)+"s":"En pause"}</span>
               <button type="button" class="rpg-main-toggle" data-pause>${running?"⏸ Pause":"▶ Lancer"} <small>Espace</small></button>
+              <button type="button" class="rpg-sound-toggle" data-sound aria-label="Activer ou désactiver les effets sonores">
+                ${soundEnabled?"♪ Son":"♪ Muet"}</button>
               <button type="button" class="rpg-help-trigger" data-help>?</button>
             </div>
           </header>
@@ -350,6 +387,9 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       root.querySelectorAll<HTMLButtonElement>("[data-power]").forEach(b=>b.addEventListener("click",()=>changePower(Number(b.dataset.power))));
       root.querySelector<HTMLButtonElement>("[data-confirm]")?.addEventListener("click",confirm);
       root.querySelectorAll<HTMLButtonElement>("[data-pause]").forEach(b=>b.addEventListener("click",toggle));
+      root.querySelectorAll<HTMLButtonElement>("[data-sound]").forEach(b=>b.addEventListener("click",()=>{
+        soundEnabled=!soundEnabled; if(soundEnabled)emitSound("charge"); render();
+      }));
       root.querySelectorAll<HTMLButtonElement>("[data-help]").forEach(b=>b.addEventListener("click",()=>{
         help=!help;
         if(help)running=false;
@@ -389,14 +429,26 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         if(feedbackFor===0)render();
       }
       if(!running || battle.status!=="active")return;
-      elapsed+=k.dt();
+      const dt=k.dt();
+      energyElapsed+=dt;
+      while(energyElapsed>=1) {
+        energyElapsed-=1;
+        const produced=produceFluxSecond(battle);
+        if (produced>0) feedbackFor=Math.max(feedbackFor,.65);
+      }
+      elapsed+=dt;
       const clock=document.querySelector<HTMLElement>("#rpg-clock");
       if(clock)clock.textContent=Math.max(0,Math.ceil(CYCLE_SECONDS-elapsed))+"s";
       if(elapsed<CYCLE_SECONDS)return;
       elapsed-=CYCLE_SECONDS;
       advanceRealtimeCycle(battle);
-      feedback=battle.enemyEvents.slice(-4);
+      feedback=battle.enemyEvents.slice(-6);
       feedbackFor=2.5;
+      const notable=feedback.find(event=>event.kind==="attack"||event.kind==="special"
+        ||event.kind==="revive"||event.kind==="move"||event.kind==="repair");
+      if(notable)emitSound(notable.kind==="attack"?"enemy"
+        :notable.kind==="move"?"step":notable.kind==="repair"?"repair"
+        :notable.kind==="revive"?"revive":"special");
       render();
     });
     render();

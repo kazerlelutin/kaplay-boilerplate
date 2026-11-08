@@ -440,3 +440,37 @@ canvas { display: block; image-rendering: pixelated; }
   .rpg-preview {grid-column:1}
   .rpg-reaction {flex-direction:column;align-items:flex-start;padding:9px}
 }
+
+/* Vague MVP : arène étendue, bouclier visible, jauges et feedback de projectiles. */
+.rpg-shell { width:min(1550px,100%); }
+.rpg-board {aspect-ratio:13/6.45;}
+.rpg-stage {padding:8px;}
+.rpg-cell {padding:1px;}
+.rpg-unit {width:min(92%,72px);min-height:81%;padding:2px 1px;gap:1px;}
+.rpg-unit b {font-size:clamp(13px,1.5vw,23px);}
+.rpg-unit-name {font-size:clamp(8px,.82vw,11px);}
+.rpg-unit small {font-size:clamp(8px,.77vw,10px);}
+.rpg-hp {height:11px;max-width:93%;}
+.rpg-shield-label {position:absolute;left:-9px;top:-14px;padding:2px 5px;border:1px solid #94edfd;
+  background:#175b72ed;color:#b9f7ff;font-weight:bold;font-size:10px;border-radius:12px;box-shadow:0 0 12px #7cd8ff;}
+.rpg-unit.shielded {box-shadow:0 0 0 3px #4df7ff88,0 0 18px #76d7ffb8;}
+.rpg-shield-field {fill:#7ae9ff0c;stroke:#85e7ff;stroke-width:7;stroke-dasharray:14 10;opacity:.7;
+  filter:drop-shadow(0 0 10px #7ae9ff);animation:rpg-shield-pulse 2s ease-in-out infinite;}
+@keyframes rpg-shield-pulse {0%,100%{stroke-opacity:.3}50%{stroke-opacity:1}}
+.rpg-projectile {fill:#ffb091;stroke:#ff604d;stroke-width:5;filter:drop-shadow(0 0 12px #ffb091);}
+.rpg-recovery {position:absolute;bottom:-10px;left:0;right:0;margin:auto;width:max-content;max-width:100%;
+  background:#453a34;border:1px solid #d0a072;padding:2px 5px;font-size:9px;color:#ffe4ab;white-space:nowrap;}
+.rpg-sound-toggle {padding:7px 9px;border:1px solid #718d91;background:#253941;color:#d5e8da;font-size:10px;cursor:pointer;white-space:nowrap;}
+.rpg-sound-toggle:hover {border-color:#adf3cc;}
+.rpg-event.special,.rpg-event.revive {background:#344d68;border-color:#80d6ff;color:#dbf7ff;}
+.rpg-unit.affected {animation:rpg-shake .5s ease, rpg-unit-glow 1.3s ease;}
+@keyframes rpg-unit-glow {0%{filter:brightness(1.5)}100%{filter:brightness(1)}}
+.rpg-preview p {min-height:22px;}
+@media(max-width:700px) {
+ .rpg-board {aspect-ratio:13/7;}
+ .rpg-unit {min-height:69%;width:97%}
+ .rpg-unit-name,.rpg-unit small,.rpg-energy {font-size:7px}
+ .rpg-hp {height:7px}
+ .rpg-shield-label {font-size:8px;top:-9px;left:-2px}
+ .rpg-header-stats {flex-wrap:wrap;justify-content:flex-end}
+}
