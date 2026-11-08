@@ -1,65 +1,70 @@
-# The Dunblane Quest — prototype
+# The Dunblane Quest — MVP jouable
 
-Prototype de RPG 2D en perspective isométrique, avec une esthétique 16 bits.
-L'exploration sera isométrique ; les combats tactiques et certains dialogues pourront utiliser des vues 2D classiques.
+Premier parcours vertical de **The Dunblane Quest** : RPG d'exploration 2D isométrique à l'esthétique 16 bits, avec des combats tactiques au tour par tour par **Flux**.
 
-Le dépôt a été remis à zéro à partir du boilerplate KAPLAY : **le jeu de plateforme « Blob & Coins » a été supprimé**.
-La scène de titre actuelle est un point de départ technique, **pas encore une démo jouable**.
-
-## Prérequis
-
-- [Bun](https://bun.sh) installé
-- Un navigateur moderne
+Les graphismes sont volontairement provisoires (formes dessinées par KAPLAY).
 
 ## Démarrer
+
+Prérequis : [Bun](https://bun.sh/), navigateur récent.
 
 ```bash
 bun install
 bun run dev
 ```
 
-Ouvrir l'adresse indiquée par Vite (généralement http://localhost:5173).
+Ouvrir l'URL affichée par Vite (habituellement http://localhost:5173).
 
-## Vérifier et construire
+## Jouer
+
+1. Depuis le titre, choisir **Commencer**.
+2. Dans la cour de la WUA, approcher l'instructeur violet et appuyer sur **E** ou **Entrée**.
+3. Dans le simulateur, désactiver l'émetteur adverse puis cliquer **Neutraliser**.
+4. Dans la cour, rejoindre le portail doré pour sortir.
+5. Dans les ruines, récupérer le cristal turquoise, puis approcher l'adversaire rouge.
+6. En combat réel, désactiver **l'émetteur et le relais**, puis cliquer **Neutraliser**.
+7. Revenir au point d'extraction bleu pour lire le rapport WUA.
+
+**Déplacements** : flèches ou ZQSD (une case par pression). **Interactions** : E, Entrée ou Espace.
+**Combats** : choisir un module ennemi à viser, un module allié à réparer, puis cliquer sur une action.
+La barrière adverse absorbe une partie des tirs. Le coupe-flux l'ignore. Sans sa barrière, l'adversaire redirige le Flux et frappe plus fort.
+
+## Vérifications
 
 ```bash
+bun run test
 bun run build
-bun run preview
 ```
 
-`build` exécute TypeScript puis crée les fichiers statiques dans `dist/`.
+Les tests portent sur la logique de combat indépendante du rendu.
+La CI GitHub Actions exécute les tests et le build sur chaque PR.
 
-## Architecture de départ
+## Structure
 
 ```text
 src/
-├── game/
-│   ├── config.ts        # Résolution logique et échelle
-│   └── kaplay.ts        # Création du contexte KAPLAY (global: false)
-├── scenes/
-│   └── title/
-│       └── title.ts     # Scène d'entrée provisoire
-├── main.ts              # Bootstrap
-└── style.css
-docs/
-└── PROTOTYPE.md         # Périmètre, séquencement et règles de contribution
+  game/            # Configuration KAPLAY et état de session
+  scenes/title/    # Accueil
+  features/
+    combat/domain/ # Règles de Flux, modules, dégâts, IA, neutralisation
+    combat/        # Interface de combat 2D
+    exploration/   # Cartes, déplacements, projection 2:1
+    dialogue/      # Dialogues scénarisés
+    mission/       # Rapport WUA
+  shared/ui/       # Conteneur DOM des interfaces
+tests/             # Tests de logique métier
+features/          # Scénarios Gherkin
+docs/PROTOTYPE.md  # Périmètre, limites et prochaines itérations
 ```
 
-Les futurs systèmes seront ajoutés **par feature et par entité**, uniquement quand leur ticket sera traité.
-Les règles du combat (Flux, modules, tours, IA) devront rester en TypeScript pur et testables sans le moteur de rendu. Les scènes KAPLAY gèrent l'affichage et les entrées.
+**Architecture** : exploration et scènes rendues par KAPLAY ; interfaces de dialogue/combat/rapport en DOM ; calculs de combat en TypeScript pur et testables hors navigateur.
 
-## Direction du prototype
+## Limites de cette tranche
 
-1. Combat de Flux : trois opérateurs, trois modules par camp, réallocation d'énergie, neutralisation.
-2. Exploration en vue isométrique : petite zone WUA et zone extérieure.
-3. Dialogues, mission, rapport et première amélioration.
-4. Sauvegarde locale et publication d'une version navigateur.
+- Deux cartes très petites et deux combats prédéfinis.
+- Graphismes et animations non définitifs.
+- Pas encore de sauvegarde, d'inventaire, de chimères, de monde ouvert ni de progression persistante.
+- Déplacement case par case, clavier sur bureau ; commandes tactiles non implémentées.
+- L'équilibrage, le ressenti et les transitions visuelles nécessiteront des tests de jeu.
 
-Consulter [docs/PROTOTYPE.md](docs/PROTOTYPE.md) pour les limites de périmètre et l'ordre des travaux.
-
-## Technique
-
-- Bun + TypeScript + Vite
-- KAPLAY 4000 (alpha, version verrouillée dans `bun.lock`)
-- Canvas logique 320 × 180, rendu pixel-perfect
-- Pas d'assets définitifs à ce stade
+Le document [docs/PROTOTYPE.md](docs/PROTOTYPE.md) conserve le périmètre et les étapes suivantes.

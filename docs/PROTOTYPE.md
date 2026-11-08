@@ -1,53 +1,32 @@
-# The Dunblane Quest — cadrage du prototype
+# The Dunblane Quest — MVP
 
-## Objectif
+## Tranche implémentée
 
-Construire une boucle jouable courte, sans design final, pour éprouver les mécaniques et la narration de la proposition d'adaptation de juillet 2026.
+- Écran de titre et retour au début.
+- WUA : cour isométrique, instructeur, dialogue, accès conditionnel à la sortie.
+- Simulation tactique : trois modules alliés et trois modules adverses, Flux limité.
+- Extérieur : récupération d'un cristal, contact ennemi, déclenchement d'un second combat.
+- Combat : attaque ciblée, coupe-flux, barrière, réparation, IA simple et neutralisation.
+- Rapport WUA avec un décalage narratif après l'observation d'un habitant natif protégeant un petit.
 
-## Parcours cible
+Les éléments de rendu sont des placeholders 16 bits sans assets définitifs.
 
-1. Départ à la WUA, avec Kumji et une séquence de formation.
-2. Tutoriel du combat par réseaux de Flux.
-3. Exploration isométrique d'une zone extérieure compacte.
-4. Mission de reconnaissance/récupération et combat réel.
-5. Rencontre d'un comportement adverse inattendu.
-6. Rapport de mission WUA et premier indice de dissonance narrative.
-7. Amélioration simple d'un opérateur ou d'un module.
+## Principes
 
-## Mécaniques minimales
+1. Règles métier en TypeScript pur (notamment dans `features/combat/domain`).
+2. KAPLAY gère le rendu isométrique et les scènes ; DOM gère les écrans et dialogues.
+3. Aucun ajout de mécanique qui ne sert pas directement à la boucle MVP.
+4. Chaque changement doit conserver `bun run test` et `bun run build`.
 
-- Exploration 2D isométrique, interactions, collisions et transitions de scène.
-- Dialogues courts avec portrait.
-- Combat au tour par tour : trois opérateurs, trois modules par camp.
-- Flux produit par tour, coûts d'entretien, allocation, redirection.
-- Actions d'attaque, de défense, de réparation et de neutralisation.
-- Ennemi capable de rediriger le Flux après la perte d'un module.
-- Objectif de mission et critères de rapport.
+## Travaux suivants
 
-## Hors périmètre
+- Valider le comportement réel des scènes dans un navigateur (clavier, interactions, lisibilité).
+- Affiner Flux / coûts et intentions ennemies avec des playtests.
+- Ajouter véritables sprites 16 bits, animations et sons.
+- Améliorer navigation (mouvement continu ou cases avec interpolation) et interactions.
+- Ajouter tests d'intégration et sauvegarde locale.
+- Introduire la progression opérateur/modules et davantage de variété de missions.
 
-- Monde ouvert et reproduction intégrale des anciennes cartes.
-- Graphismes ou animations définitifs.
-- Toutes les chimères, reliques, compétences et personnages.
-- Révélation complète sur la Citadelle.
-- Architecture générique de quêtes et éditeurs de contenu.
+## Hors MVP
 
-## Ordre de construction
-
-- **TDQ-01** — Retirer le mini-jeu, initialiser le socle (ce changement).
-- **TDQ-02 à TDQ-04** — Préparer les conventions, tests/lint et navigation initiale.
-- **TDQ-05 à TDQ-12** — Valider le combat par Flux de manière indépendante.
-- **TDQ-13 à TDQ-18** — Valider l'exploration isométrique.
-- **TDQ-19 à TDQ-24** — Assembler la mission jouable.
-- **TDQ-25 à TDQ-29** — Sauvegarde, validation, habillage provisoire et publication.
-
-## Principes de développement
-
-- Un ticket = un comportement délimité, avec une validation explicite.
-- Pas de mécanique hors scope, de refonte opportuniste ou d'ajout non demandé.
-- Une logique métier pure, distincte du rendu KAPLAY, particulièrement pour le combat.
-- Préférer des composants simples et des données de démonstration plutôt qu'une abstraction générale prématurée.
-- Les scénarios Gherkin et les tests devront accompagner les mécaniques ajoutées.
-- Conserver une application démarrable et un build valide à chaque étape.
-
-Ce document décrit le **prototype prévu**, pas les fonctionnalités déjà implémentées.
+Monde ouvert, carte complète, chimères avancées, reliques complexes, embranchements narratifs, révélation de la Citadelle-vaisseau.
