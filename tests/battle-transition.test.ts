@@ -8,6 +8,8 @@ test("La victoire de formation ramène à la WUA et valide le cursus", () => {
   const session = createSession();
   const battle = createBattle("training");
   findModule(battle.enemy, "e-weapon")!.hp = 0;
+  // Lyrius commence à 6 cases ; il doit avancer pour neutraliser à portée 5.
+  assert.equal(performAction(battle, { type: "move", actor: "p-support", to: { col: 2, row: 3 } }).ok, true);
   assert.equal(performAction(battle, { type: "neutralize" }).ok, true);
   assert.equal(battle.status, "victory");
   assert.equal(completeBattle(battle, session), "wua");
