@@ -201,6 +201,9 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
         : d > 3 ? "Cible trop éloignée de Lyrius (portée 3)." : "";
     return preview(state, `Réparer ${target.name}`, 2, `PV ${target.hp} → ${Math.min(target.maxHp, target.hp + 3)}.`, error, { distance: d, range: 3, targetHpAfter: Math.min(target.maxHp, target.hp + 3) });
   }
+  if (action.type !== "attack" && action.type !== "cut") {
+    return preview(state, "Action inconnue", 0, "", "Action non prise en charge.");
+  }
   const source = findModule(state.player, action.type === "attack" ? "p-weapon" : "p-support")!;
   const target = findModule(state.enemy, action.target);
   const cost = action.type === "cut" ? 3 : 2;
@@ -276,7 +279,7 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
     const target = findModule(state.player, action.target)!;
     target.hp = result.targetHpAfter!;
     write(state, `Lyrius répare ${target.name} : ${target.hp}/${target.maxHp} PV.`);
-  } else {
+  } else if (action.type === "attack" || action.type === "cut") {
     const target = findModule(state.enemy, action.target)!;
     target.hp = result.targetHpAfter!;
     write(state, `${action.type === "attack" ? "Kumji frappe" : "Lyrius coupe le Flux de"} ${target.name} : −${result.damage} PV.`);

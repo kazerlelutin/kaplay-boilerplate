@@ -4,7 +4,6 @@ import {
   BOARD_COLUMNS,
   BOARD_ROWS,
   OBSTACLES,
-  canNeutralize,
   createBattle,
   distance,
   findModule,
@@ -12,7 +11,6 @@ import {
   isBoardCellFree,
   performAction,
   previewAction,
-  type ActionPreview,
   type BattleAction,
   type BattleModule,
   type EnemyIntent,
@@ -53,11 +51,6 @@ function modulePill(item: BattleModule, selected: boolean, side: "ally" | "enemy
       ${bar(item)}
       <small>${item.hp}/${item.maxHp} PV ${item.hp === 0 ? "· HS" : ""}</small>
     </button>`;
-}
-
-function opponentMessage(intent: EnemyIntent): string {
-  if (intent.kind === "attack") return `L'ennemi vise un module allié. ${intent.netDamage} dégât(s) prévus sur le réseau, ${intent.absorbed} bloqué(s).`;
-  return intent.description;
 }
 
 export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
