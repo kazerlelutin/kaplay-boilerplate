@@ -156,6 +156,34 @@ export function getFluxEconomy(state: BattleState): { produced: number; upkeep: 
   const upkeep = state.player.filter((unit) => unit.role !== "source" && unit.hp > 0).length;
   return { produced, upkeep, available: Math.max(0, produced - upkeep), sourceHp };
 }
+/** Production réellement accordée par seconde, indépendamment des réactions ennemies. */
+export function fluxPerSecond(state: BattleState): number {
+  const hp = findModule(state.player,"p-source")?.hp ?? 0;
+  return hp > 0 ? Math.max(0,2 + state.productionBoost - (5-hp)) : 0;
+}
+export function produceFluxSecond(state: BattleState): number {
+  if (state.status!=="active") return 0;
+  const amount=Math.min(Math.max(0,state.maxFlux-state.flux),fluxPerSecond(state));
+  state.flux+=amount;
+  state.enemyFlux=Math.min(SOURCE_CAPACITY,state.enemyFlux+2);
+  if(amount>0) note(state,"Cellule : +" + amount + " Flux.","flux","p-source",amount);
+  return amount;
+}
+/** Le premier personnage en état de combattre sur le rayon reçoit le tir. */
+export function interceptShot(state: BattleState, shooter: Point, target: BattleModule): BattleModule {
+  for (const tile of rayTiles(shooter,target.position).slice(0,-1)) {
+    const blocker=state.player.find(unit=>unit.role!=="source" && unit.hp>0 && same(unit.position,tile));
+    if(blocker)return blocker;
+  }
+  return target;
+}
+export function enemyCanTransmit(state: BattleState, target: Point): boolean {
+  const core=findModule(state.enemy,"e-source")!;
+  const relay=findModule(state.enemy,"e-relay")!;
+  return canTransmit(core.position,target) || (relay.hp>0
+    && canTransmit(core.position,relay.position) && canTransmit(relay.position,target));
+}
+
 export function sourceProtected(state: BattleState): boolean {
   const source = findModule(state.player, "p-source")!;
   const darla = findModule(state.player, "p-barrier")!;

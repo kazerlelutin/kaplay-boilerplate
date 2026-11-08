@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createBattle, findModule, getFluxEconomy, getEnemyIntent,
-  performAction, previewAction, sourceProtected,
+  performAction, previewAction, sourceProtected, produceFluxSecond,
 } from "../src/features/combat/domain/battle.ts";
 
 test("Production initiale : 9 générés, 3 d'entretien, 6 à distribuer", () => {
@@ -32,6 +32,10 @@ test("La cellule conserve sa réserve non attribuée, plafonnée à 12", () => {
   performAction(state, { type: "orders" });
   performAction(state, { type: "end" });
   performAction(state, { type: "next" });
+  // La production est indépendante des cycles ennemis : +2 Flux par seconde.
+  produceFluxSecond(state);
+  produceFluxSecond(state);
+  produceFluxSecond(state);
   assert.equal(state.flux, 12);
   assert.equal(findModule(state.player, "p-weapon")!.energy, 0);
 });
@@ -61,6 +65,8 @@ test("La capacité d'une unité limite la distribution", () => {
 test("Darla peut stocker de l'énergie et absorber la riposte ennemie", () => {
   const state = createBattle("mission");
   assert.equal(sourceProtected(state), true);
+  findModule(state.enemy,"e-weapon")!.position={col:5,row:2};
+  findModule(state.player,"p-weapon")!.position={col:2,row:3};
   performAction(state, { type: "allocate", target: "p-barrier", amount: 3 });
   performAction(state, { type: "orders" });
   performAction(state, { type: "guard", power: 3 });
@@ -84,6 +90,8 @@ test("La cellule endommagée produit moins et peut être réparée avec la rése
 test("La destruction de la cellule cause la défaite", () => {
   const state = createBattle("mission");
   findModule(state.player, "p-source")!.hp = 1;
+  findModule(state.enemy,"e-weapon")!.position={col:5,row:2};
+  findModule(state.player,"p-weapon")!.position={col:2,row:3};
   performAction(state, { type: "orders" });
   performAction(state, { type: "end" });
   assert.equal(state.status, "defeat");

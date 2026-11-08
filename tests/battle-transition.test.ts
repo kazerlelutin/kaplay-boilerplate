@@ -34,11 +34,11 @@ test("Le noyau adverse détruit débloque une autre victoire", () => {
   const session = createSession();
   session.battleKind = "mission";
   const battle = createBattle("mission");
-  findModule(battle.player, "p-weapon")!.position = {col:4,row:2};
   findModule(battle.enemy, "e-barrier")!.hp = 0;
   findModule(battle.enemy, "e-relay")!.hp = 0;
   findModule(battle.enemy, "e-source")!.hp = 3;
   performAction(battle, { type: "allocate", target: "p-weapon", amount: 3 });
+  findModule(battle.player,"p-weapon")!.position={col:7,row:2};
   performAction(battle, { type: "orders" });
   assert.equal(performAction(battle, { type: "attack", target: "e-source", power: 3 }).ok, true);
   assert.equal(battle.victoryMode, "shutdown");

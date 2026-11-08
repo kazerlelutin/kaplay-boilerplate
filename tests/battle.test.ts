@@ -68,7 +68,7 @@ test("La portée dépend toujours de la distance réelle", () => {
 
 test("L'écran ennemi et le relais verrouillent son noyau", () => {
   const state = startOrders();
-  findModule(state.player, "p-weapon")!.position = { col: 4, row: 2 };
+  findModule(state.player, "p-weapon")!.position = { col: 7, row: 2 };
   assert.equal(enemySourceExposed(state), false);
   assert.match(previewAction(state, { type: "attack", target: "e-source", power: 3 }).reason, /Noyau protégé/);
   findModule(state.enemy, "e-barrier")!.hp = 0;
@@ -85,7 +85,7 @@ test("Le coupe-flux retire les réserves de la cible", () => {
   findModule(state.player, "p-support")!.position = { col: 3, row: 2 };
   findModule(state.enemy, "e-weapon")!.energy = 4;
   performAction(state, { type: "cut", target: "e-weapon", power: 3 });
-  assert.equal(findModule(state.enemy, "e-weapon")!.energy, 2);
+  assert.equal(findModule(state.enemy, "e-weapon")!.energy, 0);
 });
 
 test("Le relais adverse répare l'émetteur endommagé après la riposte", () => {
@@ -93,20 +93,28 @@ test("Le relais adverse répare l'émetteur endommagé après la riposte", () =>
   findModule(state.enemy, "e-weapon")!.hp = 0;
   performAction(state, { type: "orders" });
   performAction(state, { type: "end" });
+  assert.equal(findModule(state.enemy, "e-weapon")!.hp, 0);
+  assert.equal(findModule(state.enemy, "e-weapon")!.recoveryStage, "repaired");
+  performAction(state, { type: "next" });
+  performAction(state, { type: "orders" });
+  performAction(state, { type: "end" });
   assert.equal(findModule(state.enemy, "e-weapon")!.hp, 2);
-  assert.match(state.lastEnemyAction, /réparé/);
+  assert.match(state.lastEnemyAction, /service/);
 });
 
 test("La riposte annonce et résout une attaque sur la source", () => {
   const state = createBattle("mission");
-  const intent = getEnemyIntent(state);
-  assert.equal(intent.kind, "attack");
-  assert.equal(intent.target, "p-source");
-  assert.ok(intent.sourceDamage! > 0);
-  performAction(state, { type: "orders" });
-  performAction(state, { type: "end" });
-  assert.equal(findModule(state.player, "p-source")!.hp, 5 - intent.sourceDamage!);
-  assert.match(state.lastEnemyAction, /Riposte/);
+  // Kumji s'interpose entre la sentinelle et la cellule sur la même ligne.
+  findModule(state.enemy,"e-weapon")!.position={col:5,row:2};
+  const intent=getEnemyIntent(state);
+  assert.equal(intent.kind,"attack");
+  assert.equal(intent.target,"p-weapon");
+  assert.equal(intent.sourceDamage,0);
+  performAction(state,{type:"orders"});
+  performAction(state,{type:"end"});
+  assert.equal(findModule(state.player,"p-source")!.hp,5);
+  assert.equal(findModule(state.player,"p-weapon")!.hp,5);
+  assert.match(state.lastEnemyAction,/Projectile/);
 });
 
 test("La neutralisation reste possible sans toucher au générateur ennemi", () => {
