@@ -1,68 +1,45 @@
 # language: fr
-Fonctionnalité: Combat tactique lisible
-  Les ordres sont prévisualisés avant d'être appliqués, avec leur portée et leur coût.
+Fonctionnalité: Réseau de Flux — allocation, réserves et ripostes
+  La production d'énergie n'est pas une attaque immédiate : elle se répartit dans les unités.
 
-  Scénario: Prévisualiser une attaque
-    Étant donné le début du tour de Kumji
-    Quand le joueur choisit une attaque et vise l'émetteur adverse
-    Alors le jeu indique la distance et la portée
-    Et il annonce le coût en Flux et les dégâts prévus
-    Et aucune ressource ne change avant confirmation
+  Scénario: Distribuer puis attaquer
+    Étant donné une cellule produisant six unités utilisables par tour
+    Quand j'attribue trois unités à Kumji
+    Et que je passe aux actions
+    Alors Kumji possède trois unités de Flux
+    Et la cellule conserve trois unités
+    Et je peux choisir entre une attaque de deux ou trois Flux
 
-  Scénario: Refuser une attaque hors de portée
-    Étant donné Lyrius à six cases de l'émetteur
-    Quand le joueur prévisualise Coupe-flux de portée cinq
-    Alors la validation est désactivée
-    Et le jeu explique que Lyrius doit se rapprocher
+  Scénario: Booster une attaque
+    Étant donné Kumji avec quatre unités de Flux stockées
+    Quand je prévisualise une attaque de deux Flux
+    Et que j'augmente sa puissance à quatre
+    Alors les dégâts prévus augmentent
+    Et les quatre unités ne sont dépensées qu'à la confirmation
 
-  Scénario: Déplacer un opérateur
-    Étant donné Lyrius sur une case libre
-    Quand le joueur sélectionne Déplacer et une case voisine libre
-    Alors le coût de un Flux est prévisualisé
-    Et la position ne change qu'après confirmation
+  Scénario: Garder la réserve entre les tours
+    Étant donné trois unités de Flux stockées chez Kumji
+    Quand le tour se termine
+    Et que la nouvelle production est ajoutée à la cellule
+    Alors Kumji conserve ses trois unités
+    Et le Flux de la cellule s'ajoute sans dépasser sa capacité
 
-  Scénario: Comprendre les phases
-    Étant donné un tour du joueur avec six Flux disponibles
-    Quand le joueur donne ses ordres puis termine le tour
-    Alors la riposte ennemie est exécutée et visible
-    Et le joueur choisit explicitement de commencer le tour suivant
-    Et les six Flux sont alors récupérés
+  Scénario: Transférer entre opérateurs
+    Étant donné Kumji avec quatre unités et Darla avec zéro
+    Quand Kumji transfère trois unités à Darla
+    Alors Kumji en conserve une et Darla en possède trois
+    Et la somme des réserves reste constante
 
-  Scénario: Sortir automatiquement après la victoire en formation
-    Étant donné une neutralisation réussie lors de la formation WUA
-    Quand le joueur confirme la neutralisation
-    Alors il retourne directement à la cour de la WUA
-    Et la formation est marquée comme validée
-    Et aucun bouton "Continuer" n'est nécessaire
+  Scénario: Protéger le noyau ennemi
+    Étant donné un écran et un relais ennemis opérationnels
+    Quand j'essaie d'attaquer leur noyau énergétique
+    Alors l'attaque est refusée et son verrouillage est expliqué
+    Quand je neutralise l'écran et le relais
+    Alors le noyau devient vulnérable
 
-  Scénario: Sortir automatiquement après la victoire en mission
-    Étant donné une neutralisation réussie lors de la mission extérieure
-    Quand le joueur confirme la neutralisation
-    Alors il retourne directement dans la zone extérieure
-    Et la mission est marquée comme réussie
-
-  Scénario: Relancer un combat perdu
-    Étant donné la défaite de l'équipe
-    Quand le joueur sélectionne "Réessayer"
-    Alors le même combat recommence
-
-  Scénario: Comprendre la production d'énergie
-    Étant donné une cellule de Flux intacte et trois modules actifs
-    Quand un nouveau tour commence
-    Alors la cellule produit neuf unités de Flux
-    Et les trois modules consomment chacun une unité d'entretien
-    Et six unités restent disponibles pour agir
-
-  Scénario: Défendre la cellule productrice
-    Étant donné Darla à deux cases de la cellule
-    Quand elle lance Protéger
-    Et que la riposte vise la cellule
-    Alors la barrière absorbe les dégâts de la prochaine attaque
-    Et la cellule produit normalement au tour suivant
-
-  Scénario: Une source endommagée réduit les actions possibles
-    Étant donné une cellule ayant perdu un point de vie
-    Quand le tour suivant commence
-    Alors la cellule produit huit unités de Flux
-    Et le réseau consomme les trois unités d'entretien
-    Et le joueur peut dépenser cinq unités de Flux
+  Scénario: Une IA qui exploite ses réserves
+    Étant donné un ennemi avec un relais énergétique actif
+    Quand son émetteur est neutralisé à la fin de mon tour
+    Alors l'adversaire peut transférer du Flux vers son relais
+    Et il peut reconstruire l'émetteur
+    Et l'action ennemie devient visible dans le terrain et son récapitulatif

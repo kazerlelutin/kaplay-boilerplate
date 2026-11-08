@@ -1,133 +1,121 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  canNeutralize, createBattle, distance, findModule, getEnemyIntent, performAction,
-  previewAction, type BattleState,
+  canNeutralize, createBattle, distance, enemySourceExposed, findModule,
+  getEnemyIntent, performAction, previewAction,
 } from "../src/features/combat/domain/battle.ts";
 
-function advance(state: BattleState): void {
-  assert.equal(performAction(state, { type: "end" }).ok, true);
-  if (state.status === "active") assert.equal(performAction(state, { type: "next" }).ok, true);
+function startOrders(kind: "training" | "mission" = "mission") {
+  const state = createBattle(kind);
+  assert.equal(performAction(state, { type: "allocate", target: "p-weapon", amount: 3 }).ok, true);
+  assert.equal(performAction(state, { type: "allocate", target: "p-support", amount: 3 }).ok, true);
+  assert.equal(performAction(state, { type: "orders" }).ok, true);
+  return state;
 }
 
-test("Le tour est découpé entre phase du joueur, riposte et récupération du Flux", () => {
+test("Le tour passe par la distribution, les ordres puis la riposte", () => {
   const state = createBattle("training");
+  assert.equal(state.phase, "allocation");
+  assert.equal(previewAction(state, { type: "attack", target: "e-weapon", power: 2 }).ok, false);
+  performAction(state, { type: "allocate", target: "p-weapon", amount: 3 });
+  performAction(state, { type: "orders" });
   assert.equal(state.phase, "player");
-  assert.equal(performAction(state, { type: "guard" }).ok, true);
-  assert.equal(state.flux, 4);
-  assert.equal(state.round, 1);
   assert.equal(performAction(state, { type: "end" }).ok, true);
   assert.equal(state.phase, "enemy");
-  assert.equal(state.round, 1);
-  assert.equal(performAction(state, { type: "guard" }).ok, false);
-  assert.equal(performAction(state, { type: "next" }).ok, true);
+  assert.equal(performAction(state, { type: "orders" }).ok, false);
+  performAction(state, { type: "next" });
+  assert.equal(state.phase, "allocation");
   assert.equal(state.round, 2);
-  assert.equal(state.phase, "player");
-  assert.equal(state.flux, state.maxFlux);
 });
 
-test("La prévisualisation d'un tir ne consomme rien et donne exactement les dégâts appliqués", () => {
-  const state = createBattle("mission");
-  const action = { type: "attack", target: "e-weapon" } as const;
-  const before = findModule(state.enemy, "e-weapon")!.hp;
-  const estimated = previewAction(state, action);
-  assert.equal(estimated.ok, true);
-  assert.equal(estimated.distance, 4);
-  assert.equal(estimated.range, 4);
-  assert.equal(estimated.damage, 2);
-  assert.equal(state.flux, 6);
-  assert.equal(before, findModule(state.enemy, "e-weapon")!.hp);
-  assert.equal(performAction(state, action).ok, true);
-  assert.equal(findModule(state.enemy, "e-weapon")!.hp, estimated.targetHpAfter);
-  assert.equal(state.flux, estimated.fluxAfter);
+test("L'attaque boostée consomme les réserves de Kumji et provoque plus de dégâts", () => {
+  const normal = startOrders();
+  const boosted = startOrders();
+  const regular = previewAction(normal, { type: "attack", target: "e-weapon", power: 2 });
+  const better = previewAction(boosted, { type: "attack", target: "e-weapon", power: 3 });
+  assert.equal(regular.ok, true);
+  assert.equal(better.ok, true);
+  assert.ok(better.damage! > regular.damage!);
+  assert.equal(findModule(normal.player, "p-weapon")!.energy, 3);
+  performAction(normal, { type: "attack", target: "e-weapon", power: 2 });
+  assert.equal(findModule(normal.player, "p-weapon")!.energy, 1);
+  performAction(boosted, { type: "attack", target: "e-weapon", power: 3 });
+  assert.equal(findModule(boosted.player, "p-weapon")!.energy, 0);
 });
 
-test("Portées réelles et cases orthogonales : tir et coupe-flux différents", () => {
+test("Le joueur ne peut pas frapper sans énergie stockée dans l'unité", () => {
   const state = createBattle("mission");
-  const cut = previewAction(state, { type: "cut", target: "e-weapon" });
+  performAction(state, { type: "orders" });
+  const denied = previewAction(state, { type: "attack", target: "e-weapon", power: 2 });
+  assert.equal(denied.ok, false);
+  assert.match(denied.reason, /Kumji/);
+  assert.equal(performAction(state, { type: "attack", target: "e-weapon", power: 2 }).ok, false);
+});
+
+test("La portée dépend toujours de la distance réelle", () => {
+  const state = startOrders();
+  assert.equal(distance({ col: 1, row: 3 }, { col: 6, row: 2 }), 6);
+  const cut = previewAction(state, { type: "cut", target: "e-weapon", power: 3 });
   assert.equal(cut.ok, false);
-  assert.equal(cut.distance, 6);
   assert.equal(cut.range, 5);
-  assert.equal(performAction(state, { type: "cut", target: "e-weapon" }).ok, false);
-  assert.equal(state.flux, 6);
-  assert.equal(distance({ col: 1, row: 3 }, { col: 2, row: 2 }), 2);
+  assert.equal(cut.distance, 6);
+  performAction(state, { type: "move", actor: "p-support", to: { col: 2, row: 3 } });
+  assert.equal(previewAction(state, { type: "cut", target: "e-weapon", power: 3 }).ok, false);
+  // Le déplacement a utilisé 1 Flux : l'opérateur n'a plus assez d'énergie (2/3).
+  assert.match(previewAction(state, { type: "cut", target: "e-weapon", power: 3 }).reason, /Lyrius/);
 });
 
-test("Un déplacement doit être confirmé, coûte 1 Flux, et ne traverse pas les unités", () => {
-  const state = createBattle("mission");
-  const valid = { type: "move", actor: "p-support", to: { col: 2, row: 3 } } as const;
-  const expected = previewAction(state, valid);
-  assert.equal(expected.ok, true);
-  assert.deepEqual(findModule(state.player, "p-support")!.position, { col: 1, row: 3 });
-  assert.equal(performAction(state, valid).ok, true);
-  assert.equal(state.flux, 5);
-  assert.deepEqual(findModule(state.player, "p-support")!.position, { col: 2, row: 3 });
-  assert.equal(previewAction(state, { type: "cut", target: "e-weapon" }).ok, true);
-  const occupied = previewAction(state, { type: "move", actor: "p-support", to: { col: 2, row: 2 } });
-  assert.equal(occupied.ok, false);
-  assert.equal(state.flux, 5);
-});
-
-test("La barrière réduit l'attaque directe mais le coupe-flux l'ignore", () => {
-  const state = createBattle("mission");
-  assert.equal(previewAction(state, { type: "attack", target: "e-weapon" }).damage, 2);
+test("L'écran ennemi et le relais verrouillent son noyau", () => {
+  const state = startOrders();
+  findModule(state.player, "p-weapon")!.position = { col: 4, row: 2 };
+  assert.equal(enemySourceExposed(state), false);
+  assert.match(previewAction(state, { type: "attack", target: "e-source", power: 3 }).reason, /Noyau protégé/);
   findModule(state.enemy, "e-barrier")!.hp = 0;
-  assert.equal(previewAction(state, { type: "attack", target: "e-weapon" }).damage, 3);
-  const moved = { type: "move", actor: "p-support", to: { col: 2, row: 3 } } as const;
-  performAction(state, moved);
-  assert.equal(previewAction(state, { type: "cut", target: "e-weapon" }).damage, 2);
+  assert.equal(enemySourceExposed(state), false);
+  findModule(state.enemy, "e-relay")!.hp = 0;
+  assert.equal(enemySourceExposed(state), true);
+  const result = previewAction(state, { type: "attack", target: "e-source", power: 3 });
+  assert.equal(result.ok, true);
+  assert.equal(performAction(state, { type: "attack", target: "e-source", power: 3 }).ok, true);
 });
 
-test("La riposte annonce sa cible et son résultat avant de modifier le réseau", () => {
+test("Le coupe-flux retire les réserves de la cible", () => {
+  const state = startOrders();
+  findModule(state.player, "p-support")!.position = { col: 2, row: 3 };
+  findModule(state.enemy, "e-weapon")!.energy = 4;
+  performAction(state, { type: "cut", target: "e-weapon", power: 3 });
+  assert.equal(findModule(state.enemy, "e-weapon")!.energy, 2);
+});
+
+test("Le relais adverse répare l'émetteur endommagé après la riposte", () => {
+  const state = createBattle("mission");
+  findModule(state.enemy, "e-weapon")!.hp = 0;
+  performAction(state, { type: "orders" });
+  performAction(state, { type: "end" });
+  assert.equal(findModule(state.enemy, "e-weapon")!.hp, 2);
+  assert.match(state.lastEnemyAction, /réparé/);
+});
+
+test("La riposte annonce et résout une attaque sur la source", () => {
   const state = createBattle("mission");
   const intent = getEnemyIntent(state);
   assert.equal(intent.kind, "attack");
   assert.equal(intent.target, "p-source");
-  assert.equal(intent.netDamage, 2);
-  assert.equal(state.integrity, 16);
+  assert.ok(intent.sourceDamage! > 0);
+  performAction(state, { type: "orders" });
   performAction(state, { type: "end" });
-  assert.equal(state.integrity, 14);
-  assert.equal(findModule(state.player, "p-source")!.hp, 4);
+  assert.equal(findModule(state.player, "p-source")!.hp, 5 - intent.sourceDamage!);
+  assert.match(state.lastEnemyAction, /Riposte/);
 });
 
-test("Sans barrière ennemie, le Flux est redirigé vers l'arme", () => {
-  const normal = createBattle("mission");
-  const exposed = createBattle("mission");
-  findModule(exposed.enemy, "e-barrier")!.hp = 0;
-  assert.equal(getEnemyIntent(normal).damage, 3);
-  assert.equal(getEnemyIntent(exposed).damage, 5);
-  performAction(exposed, { type: "end" });
-  assert.equal(exposed.integrity, 12);
-});
-
-test("Le relais permet la réparation entre deux tours si l'émetteur est neutralisé", () => {
-  const state = createBattle("mission");
+test("La neutralisation reste possible sans toucher au générateur ennemi", () => {
+  const state = createBattle("training");
   findModule(state.enemy, "e-weapon")!.hp = 0;
-  advance(state);
-  assert.equal(findModule(state.enemy, "e-weapon")!.hp, 2);
-  findModule(state.enemy, "e-weapon")!.hp = 0;
-  findModule(state.enemy, "e-relay")!.hp = 0;
-  advance(state);
-  assert.equal(findModule(state.enemy, "e-weapon")!.hp, 0);
-});
-
-test("La neutralisation a ses conditions et sa portée", () => {
-  const state = createBattle("mission");
-  findModule(state.enemy, "e-weapon")!.hp = 0;
-  assert.equal(canNeutralize(state), false);
-  findModule(state.enemy, "e-relay")!.hp = 0;
   assert.equal(canNeutralize(state), true);
-  assert.equal(previewAction(state, { type: "neutralize" }).ok, false);
+  performAction(state, { type: "allocate", target: "p-support", amount: 3 });
+  performAction(state, { type: "orders" });
   performAction(state, { type: "move", actor: "p-support", to: { col: 2, row: 3 } });
-  assert.equal(previewAction(state, { type: "neutralize" }).ok, true);
   assert.equal(performAction(state, { type: "neutralize" }).ok, true);
   assert.equal(state.status, "victory");
-});
-
-test("La défaite termine immédiatement le combat", () => {
-  const state = createBattle("mission");
-  state.integrity = 2;
-  performAction(state, { type: "end" });
-  assert.equal(state.status, "defeat");
-  assert.equal(performAction(state, { type: "next" }).ok, false);
+  assert.equal(state.victoryMode, "neutralize");
 });

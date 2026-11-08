@@ -1,41 +1,43 @@
 import type { KAPLAYCtx } from "kaplay";
 import type { GameSession } from "../../game/session";
 import {
-  BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, createBattle, distance, findModule,
-  getEnemyIntent, getFluxEconomy, isBoardCellFree, performAction, previewAction,
-  sourceProtected, type BattleAction, type BattleModule, type Point,
+  BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, UNIT_CAPACITY,
+  createBattle, distance, enemySourceExposed, findModule,
+  getEnemyIntent, getFluxEconomy, isBoardCellFree,
+  performAction, previewAction, sourceProtected,
+  type BattleAction, type BattleEvent, type BattleModule, type Point,
 } from "./domain/battle";
 import { completeBattle } from "./finish";
 import { setScreen } from "../../shared/ui/screen";
 
-type Order = "attack" | "cut" | "repair" | "guard" | "neutralize" | "move";
-
-const ORDERS: Record<string, Order[]> = {
-  "p-weapon": ["attack", "move"],
-  "p-barrier": ["guard", "move"],
-  "p-support": ["cut", "repair", "neutralize", "move"],
+type Order = "attack" | "cut" | "repair" | "guard" | "move" | "transfer" | "neutralize";
+const ACTIONS: Record<string, Order[]> = {
+  "p-weapon": ["attack", "transfer", "move"],
+  "p-barrier": ["guard", "transfer", "move"],
+  "p-support": ["cut", "repair", "transfer", "neutralize", "move"],
 };
-const LABEL: Record<Order, string> = {
+const TITLES: Record<Order, string> = {
   attack: "Frapper", cut: "Coupe-flux", repair: "Réparer",
-  guard: "Protéger", neutralize: "Neutraliser", move: "Bouger",
+  guard: "Bouclier", move: "Bouger", transfer: "Donner du Flux", neutralize: "Neutraliser",
 };
-const COST: Record<Order, number> = {
-  attack: 2, cut: 3, repair: 2, guard: 2, neutralize: 2, move: 1,
+const ICONS: Record<string, string> = {
+  "p-weapon": "K", "p-barrier": "D", "p-support": "L", "p-source": "✦",
+  "e-weapon": "⚔", "e-barrier": "◇", "e-relay": "◎", "e-source": "✦",
 };
+const esc = (v: string): string => v.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+const coords = (p: Point) => ({ x: (p.col + .5) * 100, y: (p.row + .5) * 100 });
 
-const e = (value: string): string => value.replaceAll("&", "&amp;")
-  .replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-
-function hpBar(unit: BattleModule): string {
-  return `<span class="lite-hp"><span style="width:${100 * unit.hp / unit.maxHp}%"></span></span>`;
-}
-
-function unitSymbol(unit: BattleModule): string {
-  const glyph: Record<string, string> = {
-    "p-weapon": "K", "p-barrier": "D", "p-support": "L", "p-source": "✦",
-    "e-weapon": "⚔", "e-barrier": "◇", "e-relay": "◎",
-  };
-  return glyph[unit.id] ?? "?";
+function compactUnit(unit: BattleModule, selected: boolean, last: BattleEvent | undefined): string {
+  const friendly = unit.id.startsWith("p-");
+  const source = unit.role === "source";
+  const icon = ICONS[unit.id];
+  const fx = last?.target === unit.id ? `<span class="arena-fx ${last.kind}">${last.kind === "flux" ? "⚡" : last.kind === "repair" ? "✚" : last.kind === "guard" ? "◆" : "✹"}${last.amount ? Math.abs(last.amount) : ""}</span>` : "";
+  return `<span class="arena-token ${friendly ? "friend" : "foe"} ${source ? "core" : ""} ${selected ? "active" : ""} ${unit.hp === 0 ? "broken" : ""}">
+    <b>${icon}</b><span class="arena-name">${esc(unit.operator)}</span>
+    <span class="arena-hp"><i style="width:${100 * unit.hp / unit.maxHp}%"></i></span>
+    <span class="arena-charge">${source ? "PROD" : "⚡" + unit.energy}</span>${fx}
+  </span>`;
 }
 
 export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
@@ -43,15 +45,20 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
     const battle = createBattle(session.battleKind);
     let actorId = "p-weapon";
     let order: Order = "attack";
-    let targetEnemy = "e-weapon";
-    let targetFriend = "p-source";
-    let targetTile: Point | null = null;
-    let warning = "";
+    let enemyTarget = "e-weapon";
+    let allyTarget = "p-source";
+    let tileTarget: Point | null = null;
+    let power = 3;
+    let amount = 2;
     let help = false;
-    let lastRiposte = "";
+    let warning = "";
     let exiting = false;
-    const source = () => findModule(battle.player, "p-source")!;
+    let victoryScheduled = false;
+    let lastEnemyEvents: BattleEvent[] = [];
+
     const actor = () => findModule(battle.player, actorId)!;
+    const producer = () => findModule(battle.player, "p-source")!;
+    const enemyProducer = () => findModule(battle.enemy, "e-source")!;
 
     function exitBattle(): void {
       if (exiting) return;
@@ -60,210 +67,298 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
       exiting = true;
       k.go(destination);
     }
-    k.onKeyPress("enter", () => {
-      if (battle.status !== "active") exitBattle();
-    });
 
-    function selectedAction(): BattleAction | null {
-      if (order === "attack" || order === "cut") return { type: order, target: targetEnemy };
-      if (order === "repair") return { type: "repair", target: targetFriend };
-      if (order === "move") return targetTile ? { type: "move", actor: actorId, to: targetTile } : null;
-      return { type: order };
+    function pickActor(id: string): void {
+      if (id === "p-source") {
+        actorId = "p-support";
+        order = "repair";
+        allyTarget = "p-source";
+      } else {
+        actorId = id;
+        order = ACTIONS[id][0];
+      }
+      tileTarget = null;
+      warning = "";
     }
 
-    function endpoint(): Point | null {
-      if (order === "move") return targetTile;
-      if (order === "attack" || order === "cut") return findModule(battle.enemy, targetEnemy)?.position ?? null;
-      if (order === "repair") return findModule(battle.player, targetFriend)?.position ?? null;
-      if (order === "neutralize") return findModule(battle.enemy, "e-weapon")?.position ?? null;
-      return source().position;
+    function action(): BattleAction | null {
+      if (order === "attack" || order === "cut") return { type: order, target: enemyTarget, power };
+      if (order === "repair") return { type: "repair", target: allyTarget, power };
+      if (order === "guard") return { type: "guard", power };
+      if (order === "transfer") return { type: "transfer", from: actorId, target: allyTarget, amount };
+      if (order === "neutralize") return { type: "neutralize" };
+      return tileTarget ? { type: "move", actor: actorId, to: tileTarget } : null;
     }
 
-    function overlayLines(): string {
-      const from = source().position;
-      const screen = (point: Point) => ({ x: (point.col + .5) * 100, y: (point.row + .5) * 100 });
-      const center = screen(from);
-      const flows = battle.player.filter((unit) => unit.role !== "source" && unit.hp > 0)
+    function target(): Point | null {
+      if (order === "move") return tileTarget;
+      if (order === "guard") return producer().position;
+      if (order === "attack" || order === "cut") return findModule(battle.enemy, enemyTarget)?.position ?? null;
+      if (order === "neutralize") return findModule(battle.enemy, "e-weapon")!.position;
+      return findModule(battle.player, allyTarget)?.position ?? null;
+    }
+
+    function sourceUnit(): BattleModule {
+      if (order === "guard") return findModule(battle.player, "p-barrier")!;
+      if (order === "cut" || order === "neutralize" || order === "repair") return findModule(battle.player, "p-support")!;
+      return actor();
+    }
+
+    function board(): string {
+      const p = action();
+      const preview = p ? previewAction(battle, p) : null;
+      const from = sourceUnit().position;
+      const to = target();
+      const links = battle.player.filter((unit) => unit.role !== "source" && unit.hp > 0)
         .map((unit) => {
-          const to = screen(unit.position);
-          return `<path d="M${center.x} ${center.y} L${to.x} ${to.y}" class="lite-powerline"/>`;
+          const a = coords(producer().position);
+          const b = coords(unit.position);
+          return `<line class="link player-link" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
         }).join("");
-      const target = endpoint();
-      const activeFrom = order === "guard" ? findModule(battle.player, "p-barrier")!.position
-        : order === "cut" || order === "neutralize" || order === "repair" ? findModule(battle.player, "p-support")!.position
-          : actor().position;
-      const a = screen(activeFrom);
-      const b = target ? screen(target) : null;
-      const aim = b && order !== "guard"
-        ? `<path d="M${a.x} ${a.y} L${b.x} ${b.y}" class="lite-aimline"/>` : "";
-      return `<svg class="lite-wires" viewBox="0 0 900 500" preserveAspectRatio="none" aria-hidden="true">${flows}${aim}</svg>`;
-    }
-
-    function battlefield(): string {
-      let cells = "";
+      const enemyLinks = battle.enemy.filter((unit) => unit.role !== "source" && unit.hp > 0)
+        .map((unit) => {
+          const a = coords(enemyProducer().position);
+          const b = coords(unit.position);
+          return `<line class="link enemy-link" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
+        }).join("");
+      const line = to && battle.phase === "player"
+        ? `<line class="action-line ${preview?.ok ? "valid" : "blocked"}" x1="${coords(from).x}" y1="${coords(from).y}"
+            x2="${coords(to).x}" y2="${coords(to).y}"/>`
+        : "";
+      const intent = getEnemyIntent(battle);
+      const threat = intent.target && battle.phase === "player"
+        ? `<line class="threat-line" x1="${coords(findModule(battle.enemy,"e-weapon")!.position).x}" y1="${coords(findModule(battle.enemy,"e-weapon")!.position).y}"
+            x2="${coords(findModule(battle.player, intent.target)!.position).x}" y2="${coords(findModule(battle.player, intent.target)!.position).y}"/>`
+        : "";
+      const last = battle.events[battle.events.length - 1];
+      let tiles = "";
       for (let row = 0; row < BOARD_ROWS; row++) {
         for (let col = 0; col < BOARD_COLUMNS; col++) {
           const point = { col, row };
-          const obstacle = OBSTACLES.some((p) => distance(p, point) === 0);
-          const unit = [...battle.player, ...battle.enemy].find((u) => distance(u.position, point) === 0);
-          const ally = unit?.id.startsWith("p-") ?? false;
-          const accessible = order === "move" && isBoardCellFree(battle, point) && distance(actor().position, point) === 1;
-          const aim = endpoint();
-          const aimed = !!aim && distance(point, aim) === 0 && order !== "guard";
-          const selected = unit?.id === actorId;
-          const cls = ["lite-cell", (col + row) % 2 ? "alt" : "", obstacle ? "stone" : "",
-            unit ? "occupied" : "", accessible ? "reachable" : "", aimed ? "targeted" : "",
-            selected ? "picked" : ""].filter(Boolean).join(" ");
-          const title = unit ? `${unit.operator} — ${unit.name} : ${unit.hp}/${unit.maxHp} PV`
-            : obstacle ? "Obstacle" : `Case ${col + 1}, ${row + 1}`;
-          const content = unit ? `<span class="lite-unit ${ally ? "friendly" : "hostile"} ${unit.role === "source" ? "generator" : ""} ${unit.hp === 0 ? "dead" : ""}">
-              <b>${unitSymbol(unit)}</b><small>${e(unit.operator)}</small>${hpBar(unit)}</span>`
-            : obstacle ? '<span class="lite-rock">◆</span>' : "";
-          cells += `<button type="button" class="${cls}" data-x="${col}" data-y="${row}" title="${e(title)}" aria-label="${e(title)}" ${obstacle ? "disabled" : ""}>${content}</button>`;
+          const unit = [...battle.player, ...battle.enemy].find((u) => distance(u.position,point) === 0);
+          const rock = OBSTACLES.some((p) => distance(p,point) === 0);
+          const reachable = order === "move" && battle.phase === "player"
+            && isBoardCellFree(battle,point) && distance(actor().position,point) === 1;
+          const targeted = !!to && distance(to,point) === 0;
+          const locked = unit?.id === "e-source" && !enemySourceExposed(battle);
+          const cls = ["flow-tile", (row+col)%2 ? "alt" : "", rock ? "rock" : "", reachable ? "walk" : "",
+            targeted && battle.phase === "player" ? "aimed" : "", locked ? "locked" : ""].filter(Boolean).join(" ");
+          const label = unit ? `${unit.operator}, ${unit.hp}/${unit.maxHp} PV, ${unit.energy} Flux stocké`
+            : rock ? "Obstacle" : `Case ${col+1}, ${row+1}`;
+          tiles += `<button type="button" data-pos="${col},${row}" class="${cls}" aria-label="${esc(label)}"
+            title="${esc(label)}" ${rock ? "disabled" : ""}>
+            ${unit ? compactUnit(unit,unit.id === actorId,last) : rock ? '<span class="flow-rock">◆</span>' : ""}
+            ${locked ? '<span class="core-lock" aria-label="Noyau protégé">⌁</span>' : ""}
+          </button>`;
         }
       }
-      const economy = getFluxEconomy(battle);
-      return `<section class="lite-board-wrap" aria-label="Terrain du combat">
-        <div class="lite-board-top">
-          <span>Votre source <strong>${source().hp}/${source().maxHp} PV</strong> ${sourceProtected(battle) ? '<em>◈ sous couverture de Darla</em>' : '<em class="exposed">Source exposée</em>'}</span>
-          <span>${e(battle.kind === "training" ? "Coupez l'émetteur" : "Coupez l'émetteur et le relais")}</span>
+      return `<section class="flow-board-wrap">
+        <div class="flow-board-head"><span>VOTRE ÉQUIPE <small>Cliquer pour choisir</small></span>
+          <span class="flow-objective">${battle.kind === "training" ? "Neutraliser l'émetteur" : "Neutraliser l'émetteur et le relais"}</span>
+          <span>ADVERSAIRES <small>Le noyau est verrouillé</small></span></div>
+        <div class="flow-board">${tiles}
+          <svg class="flow-links" viewBox="0 0 900 500" preserveAspectRatio="none" aria-hidden="true">${links}${enemyLinks}${threat}${line}</svg>
         </div>
-        <div class="lite-field">${cells}${overlayLines()}</div>
-        <div class="lite-board-foot"><span>✦ Cellule : +${economy.produced} / tour</span>
-          <span>Les traits bleus = modules alimentés par la source</span></div>
       </section>`;
     }
 
-    function result(): void {
+    function victory(): void {
       const root = setScreen(`<main class="screen-center"><section class="game-card result-card">
-        <div class="eyebrow">COMBAT TERMINÉ</div><h1>Réseau hors service</h1>
-        <p>La source de Flux ou l'intégrité du réseau est tombée. Essayez de protéger la cellule.</p>
-        <button id="lite-retry" class="pixel-button primary">Réessayer ▸</button>
+        <span class="eyebrow">COMBAT TERMINÉ</span><h1>Réseau neutralisé</h1>
+        <p>Retour à l'exploration…</p><button type="button" class="pixel-button primary" data-victory>Continuer ▸</button>
       </section></main>`);
-      root.querySelector<HTMLButtonElement>("#lite-retry")?.addEventListener("click", exitBattle);
+      root.querySelector<HTMLButtonElement>("[data-victory]")?.addEventListener("click",exitBattle);
+      if (!victoryScheduled) {
+        victoryScheduled = true;
+        setTimeout(exitBattle, 700);
+      }
+    }
+
+    function defeat(): void {
+      const root = setScreen(`<main class="screen-center"><section class="game-card result-card">
+        <span class="eyebrow">SOURCE OU RÉSEAU HORS SERVICE</span><h1>Défaite</h1>
+        <p>Une réserve stockée n'est pas suffisante si le générateur est détruit. Protégez votre cellule !</p>
+        <button class="pixel-button primary" data-retry>Réessayer ▸</button>
+      </section></main>`);
+      root.querySelector<HTMLButtonElement>("[data-retry]")?.addEventListener("click",exitBattle);
+    }
+
+    function previewPanel(): string {
+      const a = action();
+      const p = a ? previewAction(battle,a) : null;
+      const required = order === "move" ? 1 : order === "neutralize" ? 2
+        : order === "transfer" ? amount : power;
+      const slider = order === "attack" || order === "cut" || order === "repair" || order === "guard"
+        ? `<div class="flow-power"><span>Puissance</span>
+            <button type="button" data-power="-1" aria-label="Réduire la puissance">−</button>
+            <strong>${power}⚡</strong><button type="button" data-power="1" aria-label="Augmenter la puissance">+</button></div>`
+        : order === "transfer"
+          ? `<div class="flow-power"><span>Transfert</span><button type="button" data-amount="-1">−</button>
+              <strong>${amount}⚡</strong><button type="button" data-amount="1">+</button></div>`
+          : "";
+      return `<div class="flow-preview" aria-live="polite"><div class="flow-preview-top">
+          <strong>${esc(p?.title ?? "Choisissez une case")}</strong>${slider}</div>
+          <p>${esc(p?.description ?? "Cliquez une case voisine sur le terrain.")}</p>
+          ${p?.distance !== undefined ? `<small>Distance : ${p.distance}/${p.range} cases</small>` : ""}
+          ${p?.reason ? `<span class="flow-error">${esc(p.reason)}</span>` : ""}
+          <button type="button" class="flow-confirm" data-confirm ${!p?.ok ? "disabled" : ""}>
+            Confirmer ${required > 0 ? `(−${required}⚡)` : ""} ▸</button>
+        </div>`;
+    }
+
+    function allocationPanel(): string {
+      const allies = battle.player.filter((unit) => unit.role !== "source");
+      return `<section class="flow-allocation" aria-label="Distribution du Flux">
+        <div class="flow-stage">
+          <span>ÉTAPE 1 / 2</span><strong>À qui donner le Flux ?</strong>
+          <small>La cellule garde le reste. Chaque unité conserve sa réserve entre les tours.</small>
+        </div>
+        <div class="flow-recipient-list">
+          ${allies.map((unit) => `<div class="flow-recipient">
+              <span><b>${esc(unit.operator)}</b><small>${unit.energy}/${unit.maxEnergy}⚡ stockés</small></span>
+              <button type="button" data-feed="${unit.id},1" ${battle.flux < 1 || unit.hp === 0 || unit.energy === unit.maxEnergy ? "disabled" : ""}>+1⚡</button>
+              <button type="button" data-feed="${unit.id},3" ${battle.flux < 3 || unit.hp === 0 || unit.energy + 3 > unit.maxEnergy ? "disabled" : ""}>+3⚡</button>
+            </div>`).join("")}
+        </div>
+        <button class="flow-main-cta" data-orders>Passer aux actions ▸</button>
+      </section>`;
+    }
+
+    function actionPanel(): string {
+      const choices = ACTIONS[actorId];
+      return `<section class="flow-actions" aria-label="Actions">
+        <div class="flow-actor-title"><span>ÉTAPE 2 / 2</span><strong>${esc(actor().operator)} <em>${actor().energy}⚡ en réserve</em></strong>
+          <button type="button" data-redistribute>Distribuer du Flux</button></div>
+        <div class="flow-action-choices">
+          ${choices.map((name) => `<button type="button" data-order="${name}" class="${order === name ? "chosen" : ""}">${TITLES[name]}</button>`).join("")}
+        </div>
+        ${previewPanel()}
+        <button type="button" data-end class="flow-end">Fin du tour →</button>
+      </section>`;
+    }
+
+    function enemyPanel(): string {
+      return `<section class="flow-enemy-turn"><span>RIPOSTE ADVERSE · TOUR ${battle.round}</span>
+        <strong>L'adversaire a réagi</strong>
+        <div class="flow-enemy-events">${lastEnemyEvents.map((event) => `<p>${esc(event.text)}</p>`).join("")}</div>
+        <button type="button" data-next>Tour ${battle.round+1} · production + répartition ▸</button>
+      </section>`;
+    }
+
+    function helpPanel(): string {
+      return `<aside class="flow-help" role="dialog" aria-modal="true" aria-label="Comprendre la mécanique de Flux">
+        <h2>La boucle de Flux</h2>
+        <p><strong>1. Production :</strong> la cellule génère 9⚡, dont 3⚡ d'entretien si les trois modules sont actifs. Elle garde jusqu'à 12⚡ non distribués.</p>
+        <p><strong>2. Distribution :</strong> donnez du Flux à vos unités. Elles stockent jusqu'à 9⚡ chacune, même au tour suivant.</p>
+        <p><strong>3. Puissance :</strong> une attaque peut utiliser 2 à 6⚡. Plus vous dépensez, plus elle frappe fort. Vous pouvez transférer du Flux entre unités proches.</p>
+        <p><strong>4. Protection :</strong> Darla couvre la cellule et utilise sa réserve pour produire un bouclier. Lyrius peut réparer la cellule.</p>
+        <p><strong>5. Adversaire :</strong> il répartit aussi son énergie et répare ses modules. Son noyau n'est attaquable qu'après avoir coupé son écran et son relais.</p>
+        <button type="button" data-help>Revenir au combat</button></aside>`;
     }
 
     function render(): void {
-      if (battle.status === "victory") {
-        exitBattle();
-        return;
-      }
-      if (battle.status === "defeat") {
-        result();
-        return;
-      }
-      const myTurn = battle.phase === "player";
-      const economy = getFluxEconomy(battle);
-      const attack = getEnemyIntent(battle);
-      const action = selectedAction();
-      const proposal = myTurn && action ? previewAction(battle, action) : null;
-      const choiceButtons = ORDERS[actorId].map((name) => `<button type="button" class="lite-command ${name === order ? "chosen" : ""}"
-          data-order="${name}" ${!myTurn ? "disabled" : ""} aria-pressed="${name === order}">
-          ${LABEL[name]} <small>${COST[name]}⚡</small></button>`).join("");
-      const options = proposal
-        ? `<strong>${e(proposal.title)}</strong><span>${e(proposal.description)}</span>
-           ${proposal.distance !== undefined ? `<small>${proposal.distance} cases / portée ${proposal.range}</small>` : ""}
-           ${proposal.reason ? `<em class="lite-invalid">${e(proposal.reason)}</em>` : ""}
-           <button type="button" class="lite-confirm" data-confirm ${!proposal.ok ? "disabled" : ""}>Confirmer · −${proposal.cost}⚡</button>`
-        : `<span>Sélectionnez une case libre à côté de ${e(actor().operator)}.</span>`;
-      const control = myTurn ? `<div class="lite-control">
-          <div class="lite-character"><small>Personnage actif</small><b>${e(actor().operator)}</b>
-            <span>${e(actor().name)}</span></div>
-          <div class="lite-orders">${choiceButtons}</div>
-          <div class="lite-preview">${options}</div>
-          <button type="button" class="lite-end" data-end>Fin du tour →</button>
-        </div>`
-        : `<div class="lite-enemy-phase">
-          <div><small>RIPOSTE ENNEMIE · TOUR ${battle.round}</small><strong>${e(battle.log[battle.log.length - 1])}</strong>
-            <span>Votre source produit à nouveau au début du prochain tour.</span></div>
-          <button type="button" data-next>Tour ${battle.round + 1} →</button>
-        </div>`;
-      const helpOverlay = help ? `<aside class="lite-help" role="dialog" aria-modal="true" aria-label="Comment fonctionne le Flux ?">
-        <h2>Flux : 3 choses à retenir</h2>
-        <p><strong>✦ La cellule</strong> fabrique l'énergie à chaque nouveau tour. Blessée, elle produit moins ; détruite, vous perdez.</p>
-        <p><strong>◈ Darla</strong> la protège à 2 cases ou moins. « Protéger » consomme 2 Flux pour absorber la prochaine attaque.</p>
-        <p><strong>⚡ Énergie disponible</strong> = production − entretien des modules. Une attaque consomme le Flux restant du tour.</p>
-        <p>Appuyez sur « Fin du tour » pour laisser agir l'ennemi, puis sur « Tour suivant » pour produire à nouveau.</p>
-        <button type="button" data-help>Revenir au combat</button>
-      </aside>` : "";
-      const root = setScreen(`<main class="combat-lite">
-        <div class="lite-shell">
-          <header class="lite-top">
-            <div class="lite-title"><span>${battle.kind === "training" ? "FORMATION WUA" : "MISSION EXTÉRIEURE"} · TOUR ${battle.round}</span><h1>Guerre de Flux</h1></div>
-            <div class="lite-resource" title="La cellule produit du Flux à chaque tour ; les modules ont un coût de veille.">
-              <strong>⚡ ${battle.flux}</strong>
-              <span>Cellule +${economy.produced} · veille −${economy.upkeep} = ${economy.available}/tour</span>
+      if (battle.status === "victory") return victory();
+      if (battle.status === "defeat") return defeat();
+      const ecn = getFluxEconomy(battle);
+      const intent = getEnemyIntent(battle);
+      const latest = battle.events.slice(-2);
+      const root = setScreen(`<main class="flow-combat">
+        <div class="flow-game">
+          <header class="flow-header">
+            <span>TOUR ${battle.round} · ${battle.phase === "allocation" ? "DISTRIBUTION" : battle.phase === "player" ? "VOS ACTIONS" : "RIPOSTE"}</span>
+            <div class="flow-head-resources">
+              <div class="flow-source"><b>✦ ${battle.flux}⚡</b><small>Cellule · +${ecn.available}/tour</small></div>
+              <div class="flow-shield"><b>◆ ${battle.guard}</b><small>Barrière</small></div>
+              <button type="button" data-help aria-label="Aide sur le Flux">?</button>
             </div>
-            <button type="button" class="lite-help-button" data-help aria-label="Comprendre le Flux">?</button>
           </header>
-          ${battlefield()}
-          <div class="lite-danger"><span class="lite-danger-icon">!</span><span>${e(myTurn ? attack.description : lastRiposte)}</span>
-            <small>${myTurn ? "Prochaine riposte" : "Résultat de la riposte"} · Source ${source().hp}/${source().maxHp} PV</small></div>
-          ${control}
-          ${warning ? `<div class="lite-toast" role="status">${e(warning)}</div>` : ""}
+          ${board()}
+          <section class="flow-threat"><strong>${battle.phase === "enemy" ? "Riposte effectuée" : "L'ennemi prépare"}</strong>
+            <span>${esc(battle.phase === "enemy" ? battle.lastEnemyAction : intent.description)}</span></section>
+          ${battle.phase === "allocation" ? allocationPanel() : battle.phase === "player" ? actionPanel() : enemyPanel()}
+          <div class="flow-events" role="status" aria-live="polite">
+            ${latest.map((event) => `<span class="flow-event ${event.kind}">${esc(event.text)}</span>`).join("")}
+          </div>
+          ${warning ? `<div class="flow-warning" role="alert">${esc(warning)}</div>` : ""}
         </div>
-        ${helpOverlay}
+        ${help ? helpPanel() : ""}
       </main>`);
 
-      root.querySelectorAll<HTMLButtonElement>("[data-x]").forEach((button) => {
-        button.addEventListener("click", () => {
-          if (!myTurn) return;
-          const point = { col: Number(button.dataset.x), row: Number(button.dataset.y) };
-          const unit = [...battle.player, ...battle.enemy].find((candidate) => distance(candidate.position, point) === 0);
-          if (unit?.id.startsWith("e-")) {
-            targetEnemy = unit.id;
-            if (actorId === "p-weapon") order = "attack";
-            if (actorId === "p-support") order = "cut";
+      root.querySelectorAll<HTMLButtonElement>("[data-pos]").forEach((button) => button.addEventListener("click", () => {
+        if (battle.phase !== "player" && battle.phase !== "allocation") return;
+        const [col,row] = button.dataset.pos!.split(",").map(Number);
+        const point = {col,row};
+        const unit = [...battle.player, ...battle.enemy].find((u) => distance(u.position,point) === 0);
+        if (unit?.id.startsWith("p-")) {
+          if (unit.id === "p-source") {
+            if (battle.phase === "player") pickActor(unit.id);
+          } else if (order === "transfer" || order === "repair") allyTarget = unit.id;
+          else pickActor(unit.id);
+        } else if (unit?.id.startsWith("e-")) {
+          enemyTarget = unit.id;
+          if (battle.phase === "player" && order !== "attack" && order !== "cut") {
+            order = actorId === "p-weapon" ? "attack" : actorId === "p-support" ? "cut" : "guard";
           }
-          else if (unit?.id === "p-source") {
-            actorId = "p-support";
-            order = "repair";
-            targetFriend = "p-source";
-          } else if (unit?.id.startsWith("p-")) {
-            if (order === "repair") targetFriend = unit.id;
-            else {
-              actorId = unit.id;
-              order = ORDERS[unit.id][0];
-            }
-          } else {
-            order = "move";
-            targetTile = point;
-          }
-          warning = "";
-          render();
-        });
-      });
-      root.querySelectorAll<HTMLButtonElement>("[data-order]").forEach((button) => {
-        button.addEventListener("click", () => {
-          order = button.dataset.order as Order;
-          targetTile = null;
-          warning = "";
-          render();
-        });
-      });
-      root.querySelector<HTMLButtonElement>("[data-confirm]")?.addEventListener("click", () => {
-        const requested = selectedAction();
-        if (!requested) return;
-        const result = performAction(battle, requested);
+        } else if (battle.phase === "player") {
+          order = "move";
+          tileTarget = point;
+        }
+        warning = "";
+        render();
+      }));
+      root.querySelectorAll<HTMLButtonElement>("[data-feed]").forEach((button) => button.addEventListener("click", () => {
+        const [target,quantity] = button.dataset.feed!.split(",");
+        const result = performAction(battle,{type:"allocate",target,amount:Number(quantity)});
         warning = result.ok ? "" : result.reason;
-        if (result.ok && order === "move") targetTile = null;
+        render();
+      }));
+      root.querySelector<HTMLButtonElement>("[data-orders]")?.addEventListener("click",() => {
+        performAction(battle,{type:"orders"});
         render();
       });
-      root.querySelector<HTMLButtonElement>("[data-end]")?.addEventListener("click", () => {
-        lastRiposte = getEnemyIntent(battle).description;
-        performAction(battle, { type: "end" });
+      root.querySelector<HTMLButtonElement>("[data-redistribute]")?.addEventListener("click",() => {
+        performAction(battle,{type:"redistribute"});
         render();
       });
-      root.querySelector<HTMLButtonElement>("[data-next]")?.addEventListener("click", () => {
-        performAction(battle, { type: "next" });
+      root.querySelectorAll<HTMLButtonElement>("[data-order]").forEach((button) => button.addEventListener("click",() => {
+        order = button.dataset.order as Order;
+        if (order === "transfer") {
+          allyTarget = battle.player.find((unit) => unit.role !== "source" && unit.id !== actorId)?.id ?? "p-barrier";
+        }
+        tileTarget = null;
+        warning = "";
+        render();
+      }));
+      root.querySelectorAll<HTMLButtonElement>("[data-power]").forEach((button) => button.addEventListener("click",() => {
+        power = Math.max(2,Math.min(6,power + Number(button.dataset.power)));
+        render();
+      }));
+      root.querySelectorAll<HTMLButtonElement>("[data-amount]").forEach((button) => button.addEventListener("click",() => {
+        amount = Math.max(1,Math.min(6,amount + Number(button.dataset.amount)));
+        render();
+      }));
+      root.querySelector<HTMLButtonElement>("[data-confirm]")?.addEventListener("click",() => {
+        const proposed = action();
+        if (!proposed) return;
+        const result = performAction(battle,proposed);
+        warning = result.ok ? "" : result.reason;
+        if (result.ok && order === "move") tileTarget = null;
         render();
       });
-      root.querySelectorAll<HTMLButtonElement>("[data-help]").forEach((button) => {
-        button.addEventListener("click", () => {
-          help = !help;
-          render();
-        });
+      root.querySelector<HTMLButtonElement>("[data-end]")?.addEventListener("click",() => {
+        performAction(battle,{type:"end"});
+        lastEnemyEvents = battle.events.slice();
+        render();
       });
+      root.querySelector<HTMLButtonElement>("[data-next]")?.addEventListener("click",() => {
+        performAction(battle,{type:"next"});
+        lastEnemyEvents = [];
+        render();
+      });
+      root.querySelectorAll<HTMLButtonElement>("[data-help]").forEach((button) => button.addEventListener("click",() => {
+        help = !help;
+        render();
+      }));
     }
     render();
   });

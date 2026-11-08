@@ -4,45 +4,51 @@ import { createBattle, findModule, performAction } from "../src/features/combat/
 import { completeBattle } from "../src/features/combat/finish.ts";
 import { createSession } from "../src/game/session.ts";
 
-test("La victoire de formation ramène à la WUA et valide le cursus", () => {
+test("La victoire d'entraînement renvoie à la WUA", () => {
   const session = createSession();
   const battle = createBattle("training");
   findModule(battle.enemy, "e-weapon")!.hp = 0;
-  // Lyrius commence à 6 cases ; il doit avancer pour neutraliser à portée 5.
-  assert.equal(performAction(battle, { type: "move", actor: "p-support", to: { col: 2, row: 3 } }).ok, true);
+  performAction(battle, { type: "allocate", target: "p-support", amount: 3 });
+  performAction(battle, { type: "orders" });
+  performAction(battle, { type: "move", actor: "p-support", to: { col: 2, row: 3 } });
   assert.equal(performAction(battle, { type: "neutralize" }).ok, true);
-  assert.equal(battle.status, "victory");
   assert.equal(completeBattle(battle, session), "wua");
   assert.equal(session.trained, true);
-  assert.equal(session.battleWon, false);
 });
 
-test("La victoire en mission ramène à l'extérieur et débloque l'extraction", () => {
+test("La victoire de mission renvoie à l'extérieur", () => {
   const session = createSession();
-  session.trained = true;
   session.battleKind = "mission";
   const battle = createBattle("mission");
   findModule(battle.enemy, "e-weapon")!.hp = 0;
   findModule(battle.enemy, "e-relay")!.hp = 0;
-  assert.equal(performAction(battle, { type: "move", actor: "p-support", to: { col: 2, row: 3 } }).ok, true);
+  performAction(battle, { type: "allocate", target: "p-support", amount: 3 });
+  performAction(battle, { type: "orders" });
+  performAction(battle, { type: "move", actor: "p-support", to: { col: 2, row: 3 } });
   assert.equal(performAction(battle, { type: "neutralize" }).ok, true);
   assert.equal(completeBattle(battle, session), "exterior");
   assert.equal(session.battleWon, true);
-  assert.equal(session.trained, true);
 });
 
-test("Une bataille active ne doit pas sortir de la scène", () => {
-  const session = createSession();
-  const battle = createBattle("training");
-  assert.equal(completeBattle(battle, session), null);
-  assert.equal(session.trained, false);
-});
-
-test("En cas de défaite, Réessayer relance le combat sans valider la mission", () => {
+test("Le noyau adverse détruit débloque une autre victoire", () => {
   const session = createSession();
   session.battleKind = "mission";
   const battle = createBattle("mission");
+  findModule(battle.player, "p-weapon")!.position = {col:4,row:2};
+  findModule(battle.enemy, "e-barrier")!.hp = 0;
+  findModule(battle.enemy, "e-relay")!.hp = 0;
+  findModule(battle.enemy, "e-source")!.hp = 3;
+  performAction(battle, { type: "allocate", target: "p-weapon", amount: 3 });
+  performAction(battle, { type: "orders" });
+  assert.equal(performAction(battle, { type: "attack", target: "e-source", power: 3 }).ok, true);
+  assert.equal(battle.victoryMode, "shutdown");
+  assert.equal(completeBattle(battle, session), "exterior");
+});
+
+test("Un combat actif ne quitte pas la scène ; une défaite permet Réessayer", () => {
+  const session = createSession();
+  const battle = createBattle("mission");
+  assert.equal(completeBattle(battle, session), null);
   battle.status = "defeat";
   assert.equal(completeBattle(battle, session), "battle");
-  assert.equal(session.battleWon, false);
 });

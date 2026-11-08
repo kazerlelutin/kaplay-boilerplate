@@ -26,11 +26,18 @@ Ouvrir l'URL affichée par Vite (habituellement http://localhost:5173).
 7. Après avoir confirmé la neutralisation, le combat se ferme automatiquement et vous revenez dans la zone précédente. Rejoindre ensuite le point d'extraction bleu pour lire le rapport WUA.
 
 **Déplacements** : flèches ou ZQSD (une case par pression). **Interactions** : E, Entrée ou Espace.
-**Combats** : l'écran affiche surtout le terrain et les personnages. Cliquer sur Kumji, Darla ou Lyrius pour choisir l'opérateur, puis une action (deux à quatre boutons selon le rôle), puis une cible/case sur le terrain. La prévisualisation compacte apparaît juste avant **Confirmer**. **Fin du tour** lance la riposte, puis **Tour suivant** recharge automatiquement le Flux disponible. Les mécanismes détaillés sont accessibles via le bouton **?**. La cellule de Flux derrière l'équipe n'est pas un opérateur sélectionnable : cliquer dessus demande à Lyrius de la réparer.
+**Combat** : chaque tour commence par la **distribution du Flux**. Cliquez sur +1 ou +3 près de Kumji, Darla ou Lyrius. La cellule conserve le reste. Ensuite, choisissez **Passer aux actions**.
 
-**Production et protection du Flux** : la cellule produit **9 Flux** par tour lorsqu'elle est intacte ; les trois modules opérationnels consomment chacun **1 Flux d'entretien**, ce qui donne **6 Flux pour agir**. Une cellule endommagée produit moins d'énergie au tour suivant (PV 5→1 : production 9→5), et sa destruction met fin au combat. Darla couvre passivement la cellule lorsqu'elle reste à **2 cases ou moins**, et peut dépenser 2 Flux pour renforcer temporairement son bouclier (+3 contre la prochaine riposte). Lyrius peut réparer la cellule. Les lignes bleues montrent les modules alimentés. Le Flux non dépensé n'est pas encore stocké d'un tour à l'autre (réserve/chimères hors MVP).
+Sélectionnez le personnage sur le terrain, choisissez une commande et, si besoin, sa cible. Le bouton ± ajuste la **puissance de 2 à 6 Flux** : plus vous dépensez, plus l'attaque ou le bouclier est efficace. **Confirmer** applique l'action, montre un effet au-dessus du module et une ligne de résultat. Vous pouvez revenir à la distribution ou transférer du Flux directement entre deux personnages (portée 3 cases).
 
-Les distances sont mesurées horizontalement et verticalement, sans diagonales. Kumji attaque à 4 cases, Lyrius utilise son coupe-flux à 5 cases, la réparation porte à 3 cases. Un déplacement d'une case coûte 1 Flux. La barrière ennemie absorbe une partie des tirs directs, mais pas le coupe-flux. Sans barrière, le Flux adverse est redirigé vers l'arme. Pour neutraliser, Lyrius doit être à portée de l'émetteur désactivé.
+**La réserve est persistante** : chaque opérateur peut cumuler jusqu'à 9 Flux, la cellule jusqu'à 12, sans perdre les points non dépensés lors du passage au tour suivant. Au début de chaque tour, la production de la cellule est ajoutée à sa réserve (9 si intacte, moins 1 par PV perdu), moins l'entretien des modules encore actifs (1 par module). La production excédant la capacité est perdue.
+
+**Darla protège la source** lorsqu'elle se trouve à deux cases ou moins ; son bouclier actif utilise son Flux personnel pour renforcer la protection. **Lyrius répare** les modules ou la source en utilisant le Flux de sa réserve. **Kumji attaque** avec sa réserve et peut amplifier les dégâts. Le coupe-flux de Lyrius endommage les modules et retire du Flux stocké chez l'adversaire.
+
+**L'ennemi utilise aussi le Flux** : il se réapprovisionne, attaque la cellule et tente de réparer l'émetteur grâce à son relais. Son propre générateur est attaquable, mais **l'écran ET le relais doivent d'abord être désactivés**. Vous pouvez aussi terminer le combat sans détruire le générateur grâce à la neutralisation. Les intentions ennemies, les dépenses d'énergie et les dégâts sont affichés sur le terrain et sous celui-ci.
+
+**Portée** : distances horizontales/verticales sans diagonales ; Kumji attaque à 4 cases, Lyrius coupe le Flux à 5, répare à 3, transferts à 3. Un déplacement d'une case coûte 1 Flux stocké dans l'opérateur.
+
 
 ## Vérifications
 
@@ -39,7 +46,7 @@ bun run test
 bun run build
 ```
 
-Les tests portent sur la logique de combat indépendante du rendu, les phases du tour, la prévisualisation, les distances et les déplacements.
+Les tests portent sur la logique métier : allocation, persistance des réserves, boost d'attaque, transfert, barrières du générateur adverse, réactions ennemies, distance, déplacements et sorties de combat.
 La CI GitHub Actions exécute les tests et le build sur chaque PR.
 
 ## Structure
