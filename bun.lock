@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "my-game",
+      "name": "the-dunblane-quest",
       "dependencies": {
         "kaplay": "^4000.0.0-alpha.27.1",
       },
