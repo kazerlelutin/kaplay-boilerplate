@@ -26,28 +26,18 @@ Ouvrir l'URL affichée par Vite (habituellement http://localhost:5173).
 7. Après avoir confirmé la neutralisation, le combat se ferme automatiquement et vous revenez dans la zone précédente. Rejoindre ensuite le point d'extraction bleu pour lire le rapport WUA.
 
 **Déplacements** : flèches ou ZQSD (une case par pression). **Interactions** : E, Entrée ou Espace.
-**Combat** : chaque tour commence par la **distribution du Flux**. Cliquez sur +1 ou +3 près de Kumji, Darla ou Lyrius. La cellule conserve le reste. Ensuite, choisissez **Passer aux actions**.
+**Combat : les actions demandent directement leur énergie au réseau.** La répartition manuelle (+1/+3) n'est plus obligatoire. Choisissez un personnage, une action et une cible : l'aperçu montre le coût et la chaîne d'alimentation choisie. Cliquez sur **Confirmer** pour exécuter. Le moteur puise d'abord dans la réserve de l'opérateur, ensuite chez les alliés connectés, enfin dans la cellule. Un relais intermédiaire peut être vide : il transmet l'énergie sans la consommer.
 
-Sélectionnez le personnage sur le terrain, choisissez une commande et, si besoin, sa cible. Le bouton ± ajuste la **puissance de 2 à 6 Flux** : plus vous dépensez, plus l'attaque ou le bouclier est efficace. **Confirmer** applique l'action, montre un effet au-dessus du module et une ligne de résultat. Vous pouvez revenir à la distribution ou transférer du Flux directement entre deux personnages (portée 3 cases).
+**Si la chaîne est rompue**, un lien orange apparaît et la prévisualisation explique pourquoi : distance entre deux unités, obstacle ou brouilleur. Les réserves déjà stockées permettent tout de même à une unité isolée de continuer à agir. Une action ne prélève jamais d'énergie lors de sa prévisualisation. Les unités conservent leurs réserves entre les cycles (9 Flux max par opérateur, 12 à la cellule).
 
-**La réserve est persistante** : chaque opérateur peut cumuler jusqu'à 9 Flux, la cellule jusqu'à 12, sans perdre les points non dépensés lors du passage au tour suivant. Au début de chaque tour, la production de la cellule est ajoutée à sa réserve (9 si intacte, moins 1 par PV perdu), moins l'entretien des modules encore actifs (1 par module). La production excédant la capacité est perdue.
+**Simulation hybride** : le combat commence en pause tactique. **Espace** ou le bouton **▶ Lancer / ⏸ Pause** démarre ou suspend la simulation. Toutes les 3 secondes, l'ennemi se déplace ou agit, puis la cellule et le noyau adverse produisent leur énergie. Les déplacements, impacts, réparations et recharges adverses apparaissent sur le terrain et dans un récapitulatif agrandi.
 
-**Darla protège la source** lorsqu'elle se trouve à deux cases ou moins ; son bouclier actif utilise son Flux personnel pour renforcer la protection. **Lyrius répare** les modules ou la source en utilisant le Flux de sa réserve. **Kumji attaque** avec sa réserve et peut amplifier les dégâts. Le coupe-flux de Lyrius endommage les modules et retire du Flux stocké chez l'adversaire.
+**Commandes clavier** : **1, 2, 3** pour Kumji, Darla, Lyrius ; **4 à 9** pour les actions contextuelles ; **flèches** ou **ZQSD** pour préparer un déplacement orthogonal ; **A/E/W/C** pour une diagonale ; **Entrée** pour confirmer ; **Espace** pour mettre en pause/reprendre. Les boutons +/− permettent d'ajuster la puissance des actions.
 
-**L'ennemi utilise aussi le Flux** : il se réapprovisionne, attaque la cellule et tente de réparer l'émetteur grâce à son relais. Son propre générateur est attaquable, mais **l'écran ET le relais doivent d'abord être désactivés**. Vous pouvez aussi terminer le combat sans détruire le générateur grâce à la neutralisation. Les intentions ennemies, les dépenses d'énergie et les dégâts sont affichés sur le terrain et sous celui-ci.
+**Production et rôles** : la cellule intacte produit 9 Flux par cycle (moins 3 d'entretien), avec une réserve de 12. Lyrius peut investir 3 Flux pour augmenter la production de +1/cycle, jusqu'à +3 ; il peut aussi réparer. Darla protège la source ; Kumji frappe en fonction de la puissance dépensée. La barrière et le relais ennemis doivent être coupés avant de cibler directement le noyau, mais la neutralisation non létale reste possible.
 
-**Portée** : distances horizontales/verticales sans diagonales ; Kumji attaque à 4 cases, Lyrius coupe le Flux à 5, répare à 3, transferts à 3. Un déplacement d'une case coûte 1 Flux stocké dans l'opérateur.
+**Terrain** : les déplacements diagonaux coûtent 2 Flux (1 en orthogonal). Les rochers bloquent mouvements et tirs, les couverts ▥ réduisent les dégâts, les brouilleurs ⌁ bloquent les transmissions. La cellule peut alimenter un allié directement à 4 cases ; les alliés relaient entre eux à 3 cases sans obstacle, ce qui étend la portée pratique du réseau.
 
-
-## Expérimentation : temps réel avec pause tactique
-
-Le combat démarre en **pause tactique** : le joueur distribue le Flux et prépare ses actions. **▶ Lancer** démarre la simulation. Toutes les **3 secondes réelles**, le générateur produit à nouveau, les réserves sont conservées et l'ennemi se déplace ou attaque. **⏸ Pause** arrête instantanément la simulation pour répartir le Flux, attaquer ou réparer sans pression.
-
-Les déplacements diagonaux coûtent 2 Flux (contre 1 pour une case orthogonale). La sentinelle adverse avance dans la limite de ses réserves. Les **rochers** empêchent les passages et les tirs ; les **couvertures ▥** réduisent les dégâts ; les **brouilleurs ⌁** interrompent les transmissions de Flux. La distribution de la cellule porte à 4 cases sans obstacle.
-
-**Lyrius : Optimiser** dépense 3 Flux stockés pour ajouter durablement +1 à la production par cycle (jusqu'à +3). Cette amélioration ne crée pas d'énergie immédiatement, et la réserve de la cellule reste limitée à 12.
-
-Cette version hybride expérimente le rythme du combat : elle conserve les actions confirmées en pause, puis résout la production et la réponse adverse à intervalles réguliers. Les déplacements ennemis et certaines actions restent discrets par cycle et ne constituent pas encore des animations continues.
 
 ## Vérifications
 

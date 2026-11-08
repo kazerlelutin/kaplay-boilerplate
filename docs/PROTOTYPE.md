@@ -30,3 +30,11 @@ Les éléments de rendu sont des placeholders 16 bits sans assets définitifs.
 ## Hors MVP
 
 Monde ouvert, carte complète, chimères avancées, reliques complexes, embranchements narratifs, révélation de la Citadelle-vaisseau.
+
+## Réseau de Flux automatique — itération UX
+
+Le joueur n'alloue plus manuellement l'énergie avant chaque action. Les réserves persistent, mais
+l'action demande son Flux à travers les alliés reliés jusqu'à la cellule. Un relais peut être
+vide ; la continuité des liaisons compte plus que le solde de chaque intermédiaire. Les trajets
+sont prévisualisés et les ruptures signalées. Les actions adverses ont des effets et un
+récapitulatif persistants sur l'écran. Commandes clavier intégrées.

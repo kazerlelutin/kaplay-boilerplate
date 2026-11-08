@@ -43,13 +43,14 @@ test("L'attaque boostée consomme les réserves de Kumji et provoque plus de dé
   assert.equal(findModule(boosted.player, "p-weapon")!.energy, 0);
 });
 
-test("Le joueur ne peut pas frapper sans énergie stockée dans l'unité", () => {
+test("Le joueur peut frapper avec l'énergie du réseau sans allocation", () => {
   const state = createBattle("mission");
   performAction(state, { type: "orders" });
-  const denied = previewAction(state, { type: "attack", target: "e-weapon", power: 2 });
-  assert.equal(denied.ok, false);
-  assert.match(denied.reason, /Kumji/);
-  assert.equal(performAction(state, { type: "attack", target: "e-weapon", power: 2 }).ok, false);
+  const preview = previewAction(state, { type: "attack", target: "e-weapon", power: 2 });
+  assert.equal(preview.ok, true);
+  assert.equal(preview.fluxPlan?.donors[0].id, "p-source");
+  assert.equal(performAction(state, { type: "attack", target: "e-weapon", power: 2 }).ok, true);
+  assert.equal(state.flux, 4);
 });
 
 test("La portée dépend toujours de la distance réelle", () => {
@@ -61,8 +62,8 @@ test("La portée dépend toujours de la distance réelle", () => {
   assert.equal(cut.distance, 6);
   performAction(state, { type: "move", actor: "p-support", to: { col: 2, row: 3 } });
   assert.equal(previewAction(state, { type: "cut", target: "e-weapon", power: 3 }).ok, false);
-  // Le déplacement a utilisé 1 Flux : l'opérateur n'a plus assez d'énergie (2/3).
-  assert.match(previewAction(state, { type: "cut", target: "e-weapon", power: 3 }).reason, /Lyrius/);
+  // La chaîne peut compenser le Flux, mais le brouilleur empêche le coupe-flux.
+  assert.match(previewAction(state, { type: "cut", target: "e-weapon", power: 3 }).reason, /brouilleur/i);
 });
 
 test("L'écran ennemi et le relais verrouillent son noyau", () => {

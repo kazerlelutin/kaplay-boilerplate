@@ -69,3 +69,38 @@ Fonctionnalité: Réseau de Flux — allocation, réserves et ripostes
     Alors le déplacement coûte deux unités de Flux
     Et un rocher bloque le mouvement et les tirs
     Et un brouilleur coupe la transmission énergétique
+
+  Scénario: Une action puise du Flux automatiquement dans la chaîne
+    Étant donné Kumji sans réserve personnelle
+    Et la cellule avec trois unités de Flux
+    Quand Kumji confirme une attaque de trois unités
+    Alors le Flux traverse le réseau jusqu'à Kumji
+    Et la cellule perd trois unités
+    Et les dégâts sont appliqués à la cible
+
+  Scénario: Relayer le Flux sur une grande distance
+    Étant donné Kumji trop éloigné de la cellule
+    Et Darla entre Kumji et la cellule à portée de chaque liaison
+    Quand Kumji demande une attaque de trois unités
+    Alors le trajet Cellule vers Darla vers Kumji apparaît
+    Et le Flux arrive à Kumji sans être consommé par Darla
+
+  Scénario: Prévisualiser une chaîne rompue
+    Étant donné Kumji isolé par un brouilleur et sans réserve
+    Quand il sélectionne une attaque
+    Alors le bouton de confirmation est désactivé
+    Et une liaison rompue est signalée sur la carte
+    Et aucune énergie n'est dépensée
+
+  Scénario: Le joueur contrôle au clavier
+    Étant donné un combat en pause tactique
+    Quand il appuie sur 2 pour sélectionner Darla
+    Et utilise les touches de commande pour sélectionner le bouclier
+    Et appuie sur Entrée
+    Alors la commande de Darla est exécutée si son réseau est alimenté
+
+  Scénario: Observer une réaction ennemie
+    Étant donné une simulation active
+    Quand une impulsion déclenche le déplacement ou l'attaque de la Sentinelle
+    Alors l'effet est visible sur la carte
+    Et le résultat reste disponible dans le récapitulatif de riposte

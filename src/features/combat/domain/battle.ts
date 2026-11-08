@@ -1,4 +1,6 @@
 /** Moteur déterministe du combat, sans dépendances graphiques. */
+import { consumeFlux, planFlux, type FluxPlan } from "./flux-network";
+
 export type BattleKind = "training" | "mission";
 export type ModuleRole = "weapon" | "barrier" | "relay" | "support" | "source";
 export type BattleStatus = "active" | "victory" | "defeat";
@@ -38,6 +40,9 @@ export interface BattleState {
   log: string[];
   events: BattleEvent[];
   lastEnemyAction: string;
+  /** Journal de la dernière riposte, conservé même après production suivante. */
+  enemyEvents: BattleEvent[];
+  lastFluxPath: string[];
 }
 
 export type BattleAction =
@@ -58,6 +63,8 @@ export interface ActionPreview {
   cost: number; fluxAfter: number;
   source?: string; target?: string; distance?: number; range?: number;
   damage?: number; targetHpAfter?: number; energyAfter?: number;
+  /** Chemins d'alimentation choisis, de la source ou d'un relais vers l'opérateur. */
+  fluxPlan?: FluxPlan;
 }
 export interface EnemyIntent {
   kind: "attack" | "repair" | "idle";
@@ -87,7 +94,7 @@ export function createBattle(kind: BattleKind): BattleState {
       module("e-relay", "Relais", "Relais", "relay", kind === "training" ? 2 : 4, 7, 3),
       module("e-source", "Noyau de Flux", "Noyau", "source", 5, 8, 2),
     ],
-    log: [], events: [], lastEnemyAction: "",
+    log: [], events: [], lastEnemyAction: "", enemyEvents: [], lastFluxPath: [],
   };
   note(state, "Distribuez le Flux de la cellule, puis donnez vos ordres.", "turn");
   return state;
@@ -170,6 +177,17 @@ function note(state: BattleState, text: string, kind: BattleEvent["kind"], targe
 
 function preview(state: BattleState, title: string, cost: number, description: string, reason = "", extras: Partial<ActionPreview> = {}): ActionPreview {
   return { ok: reason === "", title, description, reason, cost, fluxAfter: state.flux, ...extras };
+}
+function feed(state: BattleState, actorId: string, cost: number): FluxPlan {
+  return planFlux(state,actorId,cost,(a,b)=>lineBlocked(a,b,true));
+}
+function fluxSummary(state: BattleState, plan: FluxPlan, actorId: string): string {
+  if (!plan.ok) return plan.reason;
+  const unitName = (id:string) => findModule(state.player,id)?.operator ?? id;
+  if (!plan.donors.length) return "Réserve de "+unitName(actorId)+" : "+plan.own+"⚡.";
+  return plan.donors.map((part) =>
+    part.path.map(unitName).join(" → ")+" ("+part.amount+"⚡)").join(" · ")
+    +(plan.own ? " · Réserve propre : "+plan.own+"⚡" : "");
 }
 function isPositiveInteger(value: number): boolean {
   return Number.isInteger(value) && value >= 1;
@@ -265,47 +283,51 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
     const cost = moveCost(unit.position,action.to);
     const corner = cost === 2 && (!isBoardCellFree(state,{col:action.to.col,row:unit.position.row})
       || !isBoardCellFree(state,{col:unit.position.col,row:action.to.row}));
+    const network = feed(state,unit.id,cost ?? 1);
     const reason = unit.hp <= 0 ? "Module hors service."
       : cost === null ? "Une case à la fois, diagonales autorisées."
       : !isBoardCellFree(state,action.to) || corner ? "Passage bloqué."
-      : unit.energy < cost ? `${unit.operator} a besoin de ${cost} Flux.` : "";
+      : !network.ok ? network.reason : "";
     return preview(state,`Déplacer ${unit.operator}`,cost ?? 1,
-      cost === 2 ? "Diagonale (2 Flux)." : "Case orthogonale (1 Flux).",
-      reason,{source:unit.id,energyAfter:unit.energy-(cost??1)});
+      (cost === 2 ? "Diagonale (2 Flux)." : "Case orthogonale (1 Flux).")+" "+fluxSummary(state,network,unit.id),
+      reason,{source:unit.id,energyAfter:unit.energy-network.own,fluxPlan:network});
   }
   if (action.type === "neutralize") {
     const unit = findModule(state.player, "p-support")!;
     const weapon = findModule(state.enemy, "e-weapon")!;
     const d = distance(unit.position, weapon.position);
+    const network = feed(state,unit.id,2);
     const reason = !canNeutralize(state)
       ? state.kind === "training" ? "Coupez d'abord l'émetteur." : "Coupez l'émetteur et le relais."
       : unit.hp === 0 ? "Atelier hors service."
       : d > 5 ? "Lyrius doit se rapprocher (portée 5)."
-      : unit.energy < 2 ? "Donnez 2⚡ à Lyrius pour neutraliser." : "";
-    return preview(state, "Neutraliser", 2, "Couper le réseau sans détruire son noyau.", reason,
-      { source: unit.id, distance: d, range: 5, energyAfter: unit.energy - 2 });
+      : !network.ok ? network.reason : "";
+    return preview(state, "Neutraliser", 2, "Couper le réseau sans détruire son noyau. "+fluxSummary(state,network,unit.id), reason,
+      { source: unit.id, distance: d, range: 5, energyAfter: unit.energy-network.own,fluxPlan:network });
   }
   if (action.type === "tune") {
     const engineer = findModule(state.player, "p-support")!;
     const cell = findModule(state.player, "p-source")!;
+    const network = feed(state,engineer.id,3);
     const reason = engineer.hp === 0 ? "Lyrius hors service."
       : cell.hp === 0 ? "Cellule hors service."
       : state.productionBoost >= 3 ? "Production maximale atteinte (+3)."
       : distance(engineer.position, cell.position) > 3 ? "Lyrius doit rester à trois cases de la cellule."
-      : engineer.energy < 3 ? "Attribuez 3 Flux à Lyrius." : "";
+      : !network.ok ? network.reason : "";
     return preview(state, "Optimiser le générateur", 3,
-      "Investir 3 Flux pour +1 Flux à chaque cycle. Niveau actuel " + state.productionBoost + "/3.",
-      reason, {source:engineer.id, target:cell.id, energyAfter:engineer.energy-3});
+      "Investir 3 Flux pour +1 Flux à chaque cycle. Niveau actuel " + state.productionBoost + "/3. "+fluxSummary(state,network,engineer.id),
+      reason, {source:engineer.id, target:cell.id, energyAfter:engineer.energy-network.own,fluxPlan:network});
   }
   if (action.type === "guard") {
     const unit = findModule(state.player, "p-barrier")!;
+    const network = feed(state,unit.id,action.power);
     const reason = !isPositiveInteger(action.power) || action.power < 2 || action.power > 6 ? "Choisissez une puissance de 2 à 6."
       : unit.hp === 0 ? "Bouclier hors service."
       : !sourceProtected(state) ? "Darla doit être à 2 cases de la source."
-      : unit.energy < action.power ? `Darla manque de Flux : ${unit.energy}/${action.power}⚡.` : "";
+      : !network.ok ? network.reason : "";
     return preview(state, "Protéger la cellule", action.power,
-      `Darla convertit ${action.power}⚡ en ${action.power * 2} points de protection contre la prochaine riposte.`, reason,
-      { source: unit.id, energyAfter: unit.energy - action.power });
+      `Darla convertit ${action.power}⚡ en ${action.power * 2} points de protection. `+fluxSummary(state,network,unit.id), reason,
+      { source: unit.id, energyAfter: unit.energy-network.own,fluxPlan:network });
   }
   const actor = findModule(state.player, action.type === "attack" ? "p-weapon" : "p-support")!;
   const isRepair = action.type === "repair";
@@ -314,10 +336,11 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   const d = distance(actor.position, target.position);
   const range = isRepair ? 3 : action.type === "cut" ? 5 : 4;
   const minPower = action.type === "cut" ? 3 : 2;
+  const network = feed(state,actor.id,action.power);
   const reason = !isPositiveInteger(action.power) || action.power < minPower || action.power > 6
     ? `Puissance possible : ${minPower} à 6⚡.`
     : actor.hp === 0 ? "Module hors service."
-    : actor.energy < action.power ? `${actor.operator} : ${actor.energy}⚡ disponibles pour ${action.power} requis.`
+    : !network.ok ? network.reason
     : target.hp === 0 ? "Cible hors service."
     : d > range ? `Hors portée : ${d}/${range} cases.`
     : !isRepair && lineBlocked(actor.position,target.position)
@@ -338,8 +361,9 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   return preview(state,
     `${isRepair ? "Réparer" : action.type === "cut" ? "Couper le Flux de" : "Frapper"} ${target.name}`,
     power,
-    `${power}⚡ → ${isRepair ? "+" + (after - target.hp) + " PV" : "−" + (target.hp - after) + " PV"}${shield ? " (écran −1)" : ""} ; ${actor.operator} conserve ${actor.energy - power}⚡.`,
-    reason, { source: actor.id, target: target.id, distance: d, range, damage, targetHpAfter: after, energyAfter: actor.energy - power });
+    `${power}⚡ → ${isRepair ? "+" + (after - target.hp) + " PV" : "−" + (target.hp - after) + " PV"}${shield ? " (écran −1)" : ""} ; ${fluxSummary(state,network,actor.id)}.`,
+    reason, { source: actor.id, target: target.id, distance: d, range, damage, targetHpAfter: after,
+      energyAfter: actor.energy-network.own,fluxPlan:network });
 }
 
 export type ActionResult = { ok: true } | { ok: false; reason: string };
@@ -440,7 +464,8 @@ function executeEnemy(state: BattleState): void {
   }
   if (state.events.length === eventsStart) note(state, plan.description, "turn");
   state.guard = 0;
-  state.lastEnemyAction = state.events.slice(eventsStart).map((event) => event.text).join(" ");
+  state.enemyEvents = state.events.slice(eventsStart).filter(event=>event.kind!=="turn");
+  state.lastEnemyAction = state.enemyEvents.map((event) => event.text).join(" ");
   if (state.integrity <= 0 || findModule(state.player, "p-source")!.hp <= 0) {
     state.status = "defeat";
     state.phase = "finished";
@@ -455,7 +480,7 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
   if (!p.ok) return { ok: false, reason: p.reason };
   if (action.type === "orders") {
     state.phase = "player";
-    note(state, "Les ordres sont ouverts : les réserves de chaque unité sont utilisables.", "turn");
+    note(state, "Réseau de Flux connecté : les actions prélèvent automatiquement leur énergie.", "turn");
     return { ok: true };
   }
   if (action.type === "redistribute") {
@@ -497,34 +522,41 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
     return { ok: true };
   }
   state.events = [];
+  const powerUser = action.type === "move" ? action.actor
+    : action.type === "attack" ? "p-weapon"
+    : action.type === "guard" ? "p-barrier" : "p-support";
+  if (p.fluxPlan) {
+    if (!consumeFlux(state,powerUser,p.fluxPlan)) return {ok:false,reason:"Le réseau de Flux a changé. Réessayez l'action."};
+    state.lastFluxPath = p.fluxPlan.donors.flatMap(donor=>donor.path);
+    for (const donor of p.fluxPlan.donors) {
+      const from = findModule(state.player,donor.id)!;
+      const target = findModule(state.player,powerUser)!;
+      note(state,donor.path.map(id=>findModule(state.player,id)?.operator??id).join(" → ")
+        +" : "+donor.amount+"⚡.","flux",powerUser,donor.amount,{...from.position},{...target.position});
+    }
+  } else {
+    state.lastFluxPath = [];
+  }
   if (action.type === "move") {
     const unit = findModule(state.player,action.actor)!;
     const cost = moveCost(unit.position,action.to)!;
     const from = {...unit.position};
-    unit.energy -= cost;
     unit.position = {...action.to};
     note(state,`${unit.operator} avance (${cost} Flux, reste ${unit.energy}).`,"move",unit.id,cost,from,{...action.to});
   } else if (action.type === "tune") {
-    const engineer = findModule(state.player,"p-support")!;
-    engineer.energy -= 3;
     state.productionBoost += 1;
     note(state,`Générateur optimisé : +${state.productionBoost} Flux produit par cycle.`,"flux","p-source",state.productionBoost);
   } else if (action.type === "guard") {
     const unit = findModule(state.player,"p-barrier")!;
-    unit.energy -= action.power;
     state.guard += action.power * 2;
     note(state, `Darla fortifie la source (+${action.power * 2} protection, reste ${unit.energy}⚡).`, "guard", "p-source", action.power * 2);
   } else if (action.type === "neutralize") {
-    const unit = findModule(state.player, "p-support")!;
-    unit.energy -= 2;
     state.status = "victory";
     state.phase = "finished";
     state.victoryMode = "neutralize";
     note(state, "Réseau neutralisé sans détruire son noyau.", "turn");
   } else {
-    const actor = findModule(state.player, action.type === "attack" ? "p-weapon" : "p-support")!;
     const target = findModule(action.type === "repair" ? state.player : state.enemy, action.target)!;
-    actor.energy -= action.power;
     const lost = target.hp - p.targetHpAfter!;
     target.hp = p.targetHpAfter!;
     if (action.type === "cut") {
