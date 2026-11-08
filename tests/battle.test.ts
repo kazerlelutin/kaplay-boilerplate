@@ -82,12 +82,12 @@ test("La riposte annonce sa cible et son résultat avant de modifier le réseau"
   const state = createBattle("mission");
   const intent = getEnemyIntent(state);
   assert.equal(intent.kind, "attack");
-  assert.equal(intent.target, "p-weapon");
+  assert.equal(intent.target, "p-source");
   assert.equal(intent.netDamage, 3);
   assert.equal(state.integrity, 16);
   performAction(state, { type: "end" });
   assert.equal(state.integrity, 13);
-  assert.equal(findModule(state.player, "p-weapon")!.hp, 5);
+  assert.equal(findModule(state.player, "p-source")!.hp, 4);
 });
 
 test("Sans barrière ennemie, le Flux est redirigé vers l'arme", () => {

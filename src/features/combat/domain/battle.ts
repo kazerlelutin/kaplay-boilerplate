@@ -1,6 +1,6 @@
 /** Simulation de combat pure : aucune dépendance à KAPLAY ni au DOM. */
 export type BattleKind = "training" | "mission";
-export type ModuleRole = "weapon" | "barrier" | "relay" | "support";
+export type ModuleRole = "weapon" | "barrier" | "relay" | "support" | "source";
 export type BattleStatus = "active" | "victory" | "defeat";
 export type BattlePhase = "player" | "enemy" | "finished";
 export type ActionType = "attack" | "cut" | "repair" | "guard" | "neutralize" | "move" | "end" | "next";
@@ -62,6 +62,8 @@ export interface EnemyIntent {
   netDamage: number;
   distance?: number;
   range?: number;
+  sourceDamage?: number;
+  cover?: number;
 }
 
 function module(id: string, name: string, operator: string, role: ModuleRole, hp: number, col: number, row: number): BattleModule {
@@ -83,6 +85,7 @@ export function createBattle(kind: BattleKind): BattleState {
       module("p-weapon", "Lame de Kumji", "Kumji", "weapon", 6, 2, 2),
       module("p-barrier", "Bouclier de Darla", "Darla", "barrier", 5, 1, 1),
       module("p-support", "Atelier de Lyrius", "Lyrius", "support", 4, 1, 3),
+      module("p-source", "Cellule de Flux", "Source", "source", 5, 0, 2),
     ],
     enemy: [
       module("e-weapon", "Émetteur hostile", "Sentinelle", "weapon", kind === "training" ? 5 : 7, 6, 2),
@@ -109,6 +112,28 @@ export function isBoardCellFree(state: BattleState, to: Point): boolean {
     && ![...state.player, ...state.enemy].some((item) => distance(item.position, to) === 0);
 }
 
+/**
+ * La cellule produit du Flux au début de chaque tour.
+ * Chaque module toujours actif consomme une unité pour sa liaison et sa veille.
+ * La production diminue avec les dommages de la cellule.
+ */
+export function getFluxEconomy(state: BattleState): {
+  produced: number; upkeep: number; available: number; sourceHp: number;
+} {
+  const sourceHp = findModule(state.player, "p-source")?.hp ?? 0;
+  const produced = sourceHp > 0 ? 4 + sourceHp : 0;
+  const upkeep = state.player.filter((unit) => unit.role !== "source" && unit.hp > 0).length;
+  return { produced, upkeep, available: Math.max(0, produced - upkeep), sourceHp };
+}
+
+/** Darla doit rester près de la source pour la couvrir ou activer la barrière. */
+export function sourceProtected(state: BattleState): boolean {
+  const source = findModule(state.player, "p-source");
+  const defender = findModule(state.player, "p-barrier");
+  return !!source && !!defender && source.hp > 0 && defender.hp > 0
+    && distance(source.position, defender.position) <= 2;
+}
+
 export function canNeutralize(state: BattleState): boolean {
   const weaponDown = findModule(state.enemy, "e-weapon")?.hp === 0;
   const relayDown = findModule(state.enemy, "e-relay")?.hp === 0;
@@ -119,33 +144,42 @@ export function getEnemyIntent(state: BattleState): EnemyIntent {
   const weapon = findModule(state.enemy, "e-weapon")!;
   const barrier = findModule(state.enemy, "e-barrier")!;
   const relay = findModule(state.enemy, "e-relay")!;
+  const source = findModule(state.player, "p-source")!;
   if (weapon.hp === 0) {
     return relay.hp > 0
       ? { kind: "repair", description: "Le relais réparera l'émetteur (+2 PV).", damage: 0, absorbed: 0, netDamage: 0 }
-      : { kind: "idle", description: "Émetteur et relais neutralisés : aucune riposte possible.", damage: 0, absorbed: 0, netDamage: 0 };
+      : { kind: "idle", description: "Aucune riposte : émetteur et relais coupés.", damage: 0, absorbed: 0, netDamage: 0 };
   }
+  // L'adversaire privilégie l'alimentation. Sinon, la cible alliée la plus proche.
+  const sourceInRange = source.hp > 0 && distance(weapon.position, source.position) <= 6;
   const candidates = state.player
-    .filter((item) => item.hp > 0)
+    .filter((item) => item.role !== "source" && item.hp > 0)
     .map((item) => ({ item, d: distance(weapon.position, item.position) }))
-    .filter(({ d }) => d <= 5)
+    .filter(({ d }) => d <= 6)
     .sort((a, b) => a.d - b.d);
-  if (candidates.length === 0) {
-    return { kind: "idle", description: "Aucun opérateur allié à portée de l'émetteur (5 cases).", damage: 0, absorbed: 0, netDamage: 0 };
-  }
-  const target = candidates[0].item;
+  const target = sourceInRange ? source : candidates[0]?.item;
+  if (!target) return { kind: "idle", description: "Aucune cible ennemie à portée.", damage: 0, absorbed: 0, netDamage: 0 };
   let damage = (state.kind === "training" ? 2 : 3) + (barrier.hp === 0 ? 2 : 0);
   if (relay.hp === 0) damage = Math.max(1, damage - 1);
-  const absorbed = Math.min(state.guard, damage);
+  const guardActive = sourceProtected(state) && target.id === "p-source";
+  const cover = guardActive ? 1 : 0;
+  const absorbed = Math.min(damage, cover + (guardActive ? state.guard : 0));
+  const netDamage = damage - absorbed;
+  const sourceDamage = target.id === "p-source" && netDamage > 0 ? (netDamage >= 4 ? 2 : 1) : 0;
+  const description = target.id === "p-source"
+    ? `L'ennemi vise la cellule : −${sourceDamage} PV, ${absorbed} dégât(s) bloqué(s).`
+    : `L'ennemi vise ${target.operator} : ${netDamage} dégât(s) au réseau.`;
   return {
     kind: "attack",
-    description: `Émetteur → ${target.operator} : ${damage} dégâts, ${absorbed} absorbés par la barrière.`
-      + (barrier.hp === 0 ? " Flux redirigé vers l'arme (+2)." : ""),
+    description,
     target: target.id,
     damage,
     absorbed,
-    netDamage: damage - absorbed,
+    netDamage,
+    sourceDamage,
+    cover,
     distance: distance(weapon.position, target.position),
-    range: 5,
+    range: 6,
   };
 }
 
@@ -159,7 +193,8 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   const name = action.type === "end" ? "Terminer la phase" : action.type === "next" ? "Tour suivant" : action.type;
   if (state.status !== "active") return preview(state, name, 0, "", "Combat terminé.");
   if (action.type === "next") {
-    return preview(state, "Commencer le tour suivant", 0, "Récupérer 6 Flux et reprendre les ordres.", state.phase !== "enemy" ? "La riposte n'est pas terminée." : "");
+    const economy = getFluxEconomy(state);
+    return preview(state, "Tour suivant", 0, `Cellule +${economy.produced}, veille −${economy.upkeep} : ${economy.available} Flux pour vos ordres.`, state.phase !== "enemy" ? "La riposte n'est pas terminée." : "");
   }
   if (state.phase !== "player") return preview(state, name, 0, "", "La riposte ennemie doit d'abord être consultée.");
   if (action.type === "end") {
@@ -179,8 +214,9 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   if (action.type === "guard") {
     const barrier = findModule(state.player, "p-barrier")!;
     const error = barrier.hp === 0 ? "Le bouclier de Darla est hors service."
-      : state.guard >= 6 ? "Protection maximale (6) déjà atteinte." : "";
-    return preview(state, "Barrière de Darla", 2, `Protection ${state.guard} → ${Math.min(6, state.guard + 3)} contre la prochaine riposte.`, error);
+      : !sourceProtected(state) ? "Rapprochez Darla à 2 cases ou moins de la cellule."
+        : state.guard >= 6 ? "Protection maximale (6) déjà atteinte." : "";
+    return preview(state, "Protéger la cellule", 2, `Darla absorbera 3 dégâts de plus sur la prochaine attaque visant la source. Protection ${state.guard} → ${Math.min(6, state.guard + 3)}.`, error);
   }
   if (action.type === "move") {
     const actor = findModule(state.player, action.actor);
@@ -236,11 +272,11 @@ function opponentTurn(state: BattleState): void {
   } else if (intent.kind === "attack") {
     state.integrity = Math.max(0, state.integrity - intent.netDamage);
     const target = findModule(state.player, intent.target!)!;
-    if (intent.netDamage > 0) target.hp = Math.max(0, target.hp - 1);
+    if (intent.netDamage > 0) target.hp = Math.max(0, target.hp - (intent.sourceDamage ?? 1));
   }
   state.guard = 0;
   write(state, `Riposte, tour ${state.round} : ${intent.description}`);
-  if (state.integrity === 0) {
+  if (state.integrity === 0 || getFluxEconomy(state).sourceHp === 0) {
     state.status = "defeat";
     state.phase = "finished";
     write(state, "Réseau allié hors service.");
@@ -258,9 +294,11 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
   }
   if (action.type === "next") {
     state.round += 1;
-    state.flux = state.maxFlux;
+    const economy = getFluxEconomy(state);
+    state.maxFlux = economy.available;
+    state.flux = economy.available;
     state.phase = "player";
-    write(state, `Tour ${state.round} : ${state.flux} Flux disponibles pour vos actions.`);
+    write(state, `Tour ${state.round} : cellule +${economy.produced}, entretien −${economy.upkeep}, disponible ${economy.available}.`);
     return { ok: true };
   }
   state.flux -= result.cost;
@@ -270,7 +308,7 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
     write(state, `${actor.operator} avance vers (${action.to.col + 1}, ${action.to.row + 1}).`);
   } else if (action.type === "guard") {
     state.guard = Math.min(6, state.guard + 3);
-    write(state, `Darla renforce la barrière : ${state.guard} protection.`);
+    write(state, `Darla protège la cellule : +${state.guard} bouclier pour la prochaine riposte.`);
   } else if (action.type === "neutralize") {
     state.status = "victory";
     state.phase = "finished";

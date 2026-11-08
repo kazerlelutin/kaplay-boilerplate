@@ -45,3 +45,24 @@ Fonctionnalité: Combat tactique lisible
     Étant donné la défaite de l'équipe
     Quand le joueur sélectionne "Réessayer"
     Alors le même combat recommence
+
+  Scénario: Comprendre la production d'énergie
+    Étant donné une cellule de Flux intacte et trois modules actifs
+    Quand un nouveau tour commence
+    Alors la cellule produit neuf unités de Flux
+    Et les trois modules consomment chacun une unité d'entretien
+    Et six unités restent disponibles pour agir
+
+  Scénario: Défendre la cellule productrice
+    Étant donné Darla à deux cases de la cellule
+    Quand elle lance Protéger
+    Et que la riposte vise la cellule
+    Alors la barrière absorbe les dégâts de la prochaine attaque
+    Et la cellule produit normalement au tour suivant
+
+  Scénario: Une source endommagée réduit les actions possibles
+    Étant donné une cellule ayant perdu un point de vie
+    Quand le tour suivant commence
+    Alors la cellule produit huit unités de Flux
+    Et le réseau consomme les trois unités d'entretien
+    Et le joueur peut dépenser cinq unités de Flux

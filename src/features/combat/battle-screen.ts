@@ -1,75 +1,57 @@
 import type { KAPLAYCtx } from "kaplay";
 import type { GameSession } from "../../game/session";
 import {
-  BOARD_COLUMNS,
-  BOARD_ROWS,
-  OBSTACLES,
-  createBattle,
-  distance,
-  findModule,
-  getEnemyIntent,
-  isBoardCellFree,
-  performAction,
-  previewAction,
-  type BattleAction,
-  type BattleModule,
-  type EnemyIntent,
-  type Point,
+  BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, createBattle, distance, findModule,
+  getEnemyIntent, getFluxEconomy, isBoardCellFree, performAction, previewAction,
+  sourceProtected, type BattleAction, type BattleModule, type Point,
 } from "./domain/battle";
-import { setScreen } from "../../shared/ui/screen";
 import { completeBattle } from "./finish";
+import { setScreen } from "../../shared/ui/screen";
 
-type Choice = "attack" | "cut" | "repair" | "guard" | "neutralize" | "move";
+type Order = "attack" | "cut" | "repair" | "guard" | "neutralize" | "move";
 
-const LABELS: Record<Choice, string> = {
-  attack: "Attaquer",
-  cut: "Coupe-flux",
-  repair: "Réparer",
-  guard: "Barrière",
-  neutralize: "Neutraliser",
-  move: "Déplacer",
-};
-
-const ACTOR_ACTIONS: Record<string, Choice[]> = {
+const ORDERS: Record<string, Order[]> = {
   "p-weapon": ["attack", "move"],
   "p-barrier": ["guard", "move"],
   "p-support": ["cut", "repair", "neutralize", "move"],
 };
+const LABEL: Record<Order, string> = {
+  attack: "Frapper", cut: "Coupe-flux", repair: "Réparer",
+  guard: "Protéger", neutralize: "Neutraliser", move: "Bouger",
+};
+const COST: Record<Order, number> = {
+  attack: 2, cut: 3, repair: 2, guard: 2, neutralize: 2, move: 1,
+};
 
-function safeText(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+const e = (value: string): string => value.replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
+function hpBar(unit: BattleModule): string {
+  return `<span class="lite-hp"><span style="width:${100 * unit.hp / unit.maxHp}%"></span></span>`;
 }
 
-function bar(item: BattleModule): string {
-  return `<div class="compact-meter"><span style="width:${Math.round(100 * item.hp / item.maxHp)}%"></span></div>`;
-}
-
-function modulePill(item: BattleModule, selected: boolean, side: "ally" | "enemy"): string {
-  return `<button type="button" class="combat-module ${selected ? "selected" : ""} ${item.hp === 0 ? "offline" : ""}"
-      data-module="${item.id}" aria-pressed="${selected}" aria-label="${safeText(item.name)} : ${item.hp} sur ${item.maxHp} PV">
-      <span class="module-chip">${side === "ally" ? "ALLIÉ" : "ADVERSE"} · ${safeText(item.operator)}</span>
-      <strong>${safeText(item.name)}</strong>
-      ${bar(item)}
-      <small>${item.hp}/${item.maxHp} PV ${item.hp === 0 ? "· HS" : ""}</small>
-    </button>`;
+function unitSymbol(unit: BattleModule): string {
+  const glyph: Record<string, string> = {
+    "p-weapon": "K", "p-barrier": "D", "p-support": "L", "p-source": "✦",
+    "e-weapon": "⚔", "e-barrier": "◇", "e-relay": "◎",
+  };
+  return glyph[unit.id] ?? "?";
 }
 
 export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
   k.scene("battle", () => {
     const battle = createBattle(session.battleKind);
     let actorId = "p-weapon";
-    let choice: Choice = "attack";
-    let enemyTarget = "e-weapon";
-    let friendlyTarget = "p-weapon";
-    let tileTarget: Point | null = null;
-    let feedback = "";
-    let lastRiposte: EnemyIntent | null = null;
-
+    let order: Order = "attack";
+    let targetEnemy = "e-weapon";
+    let targetFriend = "p-source";
+    let targetTile: Point | null = null;
+    let warning = "";
+    let help = false;
+    let exiting = false;
+    const source = () => findModule(battle.player, "p-source")!;
     const actor = () => findModule(battle.player, actorId)!;
 
-    // Une victoire doit quitter le combat dès la confirmation, sans second bouton.
-    // Le garde évite deux changements de scène si un événement clavier arrive au même moment.
-    let exiting = false;
     function exitBattle(): void {
       if (exiting) return;
       const destination = completeBattle(battle, session);
@@ -82,95 +64,82 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
     });
 
     function selectedAction(): BattleAction | null {
-      switch (choice) {
-        case "attack":
-        case "cut":
-          return { type: choice, target: enemyTarget };
-        case "repair":
-          return { type: "repair", target: friendlyTarget };
-        case "guard":
-          return { type: "guard" };
-        case "neutralize":
-          return { type: "neutralize" };
-        case "move":
-          return tileTarget ? { type: "move", actor: actorId, to: tileTarget } : null;
-      }
+      if (order === "attack" || order === "cut") return { type: order, target: targetEnemy };
+      if (order === "repair") return { type: "repair", target: targetFriend };
+      if (order === "move") return targetTile ? { type: "move", actor: actorId, to: targetTile } : null;
+      return { type: order };
     }
 
-    function actionSource(): BattleModule {
-      if (choice === "guard") return findModule(battle.player, "p-barrier")!;
-      if (choice === "cut" || choice === "repair" || choice === "neutralize") return findModule(battle.player, "p-support")!;
-      return actor();
+    function endpoint(): Point | null {
+      if (order === "move") return targetTile;
+      if (order === "attack" || order === "cut") return findModule(battle.enemy, targetEnemy)?.position ?? null;
+      if (order === "repair") return findModule(battle.player, targetFriend)?.position ?? null;
+      if (order === "neutralize") return findModule(battle.enemy, "e-weapon")?.position ?? null;
+      return source().position;
     }
 
-    function targetPoint(): Point | null {
-      if (choice === "move") return tileTarget;
-      if (choice === "repair") return findModule(battle.player, friendlyTarget)?.position ?? null;
-      if (choice === "neutralize") return findModule(battle.enemy, "e-weapon")!.position;
-      if (choice === "attack" || choice === "cut") return findModule(battle.enemy, enemyTarget)?.position ?? null;
-      return null;
+    function overlayLines(): string {
+      const from = source().position;
+      const screen = (point: Point) => ({ x: (point.col + .5) * 100, y: (point.row + .5) * 100 });
+      const center = screen(from);
+      const flows = battle.player.filter((unit) => unit.role !== "source" && unit.hp > 0)
+        .map((unit) => {
+          const to = screen(unit.position);
+          return `<path d="M${center.x} ${center.y} L${to.x} ${to.y}" class="lite-powerline"/>`;
+        }).join("");
+      const target = endpoint();
+      const activeFrom = order === "guard" ? findModule(battle.player, "p-barrier")!.position
+        : order === "cut" || order === "neutralize" || order === "repair" ? findModule(battle.player, "p-support")!.position
+          : actor().position;
+      const a = screen(activeFrom);
+      const b = target ? screen(target) : null;
+      const aim = b && order !== "guard"
+        ? `<path d="M${a.x} ${a.y} L${b.x} ${b.y}" class="lite-aimline"/>` : "";
+      return `<svg class="lite-wires" viewBox="0 0 900 500" preserveAspectRatio="none" aria-hidden="true">${flows}${aim}</svg>`;
     }
 
-    function arena(): string {
-      const from = actionSource().position;
-      const to = targetPoint();
-      const action = selectedAction();
-      const proposed = action ? previewAction(battle, action) : null;
-      const color = proposed?.ok ? "#7ce1c0" : "#f2a77b";
-      const line = to && choice !== "guard"
-        ? `<svg class="arena-target-line" viewBox="0 0 900 500" preserveAspectRatio="none" aria-hidden="true">
-            <line x1="${(from.col + .5) * 100}" y1="${(from.row + .5) * 100}" x2="${(to.col + .5) * 100}"
-              y2="${(to.row + .5) * 100}" stroke="${color}" stroke-width="5" stroke-dasharray="12 8" />
-            <circle cx="${(to.col + .5) * 100}" cy="${(to.row + .5) * 100}" r="12" fill="${color}" />
-          </svg>` : "";
-
+    function battlefield(): string {
       let cells = "";
-      for (let row = 0; row < BOARD_ROWS; row += 1) {
-        for (let col = 0; col < BOARD_COLUMNS; col += 1) {
+      for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLUMNS; col++) {
           const point = { col, row };
-          const ally = battle.player.find((unit) => distance(unit.position, point) === 0);
-          const enemy = battle.enemy.find((unit) => distance(unit.position, point) === 0);
-          const unit = ally ?? enemy;
-          const rock = OBSTACLES.some((p) => distance(p, point) === 0);
-          const isTarget = to !== null && distance(to, point) === 0;
-          const reachable = choice === "move" && isBoardCellFree(battle, point) && distance(actor().position, point) === 1;
-          const inRange = (choice === "attack" || choice === "cut") && enemy
-            ? distance(actionSource().position, point) <= (choice === "cut" ? 5 : 4) : false;
-          const classes = ["arena-cell", (col + row) % 2 ? "shade" : "", ally ? "ally" : "", enemy ? "hostile" : "",
-            rock ? "rock" : "", reachable ? "reachable" : "", inRange ? "in-range" : "", isTarget ? "aimed" : "",
-            ally?.id === actorId ? "active-actor" : "", unit?.hp === 0 ? "disabled-unit" : ""].filter(Boolean).join(" ");
-          const short = ally ? ally.operator : enemy ? enemy.id === "e-weapon" ? "Arme" : enemy.id === "e-barrier" ? "Mur" : "Relais" : "";
-          const tag = ally ? ally.operator.slice(0, 1) : enemy ? enemy.id === "e-weapon" ? "A" : enemy.id === "e-barrier" ? "B" : "R" : "";
-          const label = unit ? `${unit.operator}, ${unit.name}, ${unit.hp} sur ${unit.maxHp} PV`
-            : rock ? "Obstacle" : `Case ${col + 1}, ${row + 1}${reachable ? ", déplacement possible" : ""}`;
-          cells += `<button type="button" class="${classes}" data-col="${col}" data-row="${row}" aria-label="${safeText(label)}"
-            ${rock ? "disabled" : ""} title="${safeText(label)}">
-              ${rock ? '<span class="arena-rock">◆</span>' : ""}
-              ${unit ? `<span class="arena-unit"><b>${tag}</b><span>${safeText(short)}</span><small>${unit.hp}/${unit.maxHp}</small></span>` : ""}
-            </button>`;
+          const obstacle = OBSTACLES.some((p) => distance(p, point) === 0);
+          const unit = [...battle.player, ...battle.enemy].find((u) => distance(u.position, point) === 0);
+          const ally = unit?.id.startsWith("p-") ?? false;
+          const accessible = order === "move" && isBoardCellFree(battle, point) && distance(actor().position, point) === 1;
+          const aim = endpoint();
+          const aimed = !!aim && distance(point, aim) === 0 && order !== "guard";
+          const selected = unit?.id === actorId;
+          const cls = ["lite-cell", (col + row) % 2 ? "alt" : "", obstacle ? "stone" : "",
+            unit ? "occupied" : "", accessible ? "reachable" : "", aimed ? "targeted" : "",
+            selected ? "picked" : ""].filter(Boolean).join(" ");
+          const title = unit ? `${unit.operator} — ${unit.name} : ${unit.hp}/${unit.maxHp} PV`
+            : obstacle ? "Obstacle" : `Case ${col + 1}, ${row + 1}`;
+          const content = unit ? `<span class="lite-unit ${ally ? "friendly" : "hostile"} ${unit.role === "source" ? "generator" : ""} ${unit.hp === 0 ? "dead" : ""}">
+              <b>${unitSymbol(unit)}</b><small>${e(unit.operator)}</small>${hpBar(unit)}</span>`
+            : obstacle ? '<span class="lite-rock">◆</span>' : "";
+          cells += `<button type="button" class="${cls}" data-x="${col}" data-y="${row}" title="${e(title)}" aria-label="${e(title)}" ${obstacle ? "disabled" : ""}>${content}</button>`;
         }
       }
-      return `<section class="arena-panel" aria-label="Placement tactique des opérateurs et des modules">
-        <div class="arena-heading"><strong>Terrain · 9 × 5 cases</strong>
-          <span><i class="legend-dot blue"></i> Alliés <i class="legend-dot red"></i> Adversaires <i class="legend-dot green"></i> Déplacement possible</span>
+      const economy = getFluxEconomy(battle);
+      return `<section class="lite-board-wrap" aria-label="Terrain du combat">
+        <div class="lite-board-top">
+          <span>Votre source <strong>${source().hp}/${source().maxHp} PV</strong> ${sourceProtected(battle) ? '<em>◈ sous couverture de Darla</em>' : '<em class="exposed">Source exposée</em>'}</span>
+          <span>${e(battle.kind === "training" ? "Coupez l'émetteur" : "Coupez l'émetteur et le relais")}</span>
         </div>
-        <div class="arena-grid">${cells}${line}</div>
-        <div class="arena-foot"><span>Distances : cases orthogonales (sans diagonales)</span>
-          <span>${to ? `Distance sélectionnée : <strong>${distance(from, to)} cases</strong>` : "Sélectionnez une cible ou une case"}</span></div>
+        <div class="lite-field">${cells}${overlayLines()}</div>
+        <div class="lite-board-foot"><span>✦ Cellule : +${economy.produced} / tour</span>
+          <span>Les traits bleus = modules alimentés par la source</span></div>
       </section>`;
     }
 
-    function resultScreen(): void {
-      const root = setScreen(`
-        <main class="screen-center">
-          <section class="game-card result-card">
-            <div class="eyebrow">ÉCHEC DE LA MISSION</div>
-            <h1>Réseau allié hors service</h1>
-            <p>Votre réseau a perdu son intégrité. Modifiez votre approche et protégez vos opérateurs.</p>
-            <button class="pixel-button primary" id="end-battle" type="button">Réessayer ▸</button>
-          </section>
-        </main>`);
-      root.querySelector<HTMLButtonElement>("#end-battle")?.addEventListener("click", exitBattle);
+    function result(): void {
+      const root = setScreen(`<main class="screen-center"><section class="game-card result-card">
+        <div class="eyebrow">COMBAT TERMINÉ</div><h1>Réseau hors service</h1>
+        <p>La source de Flux ou l'intégrité du réseau est tombée. Essayez de protéger la cellule.</p>
+        <button id="lite-retry" class="pixel-button primary">Réessayer ▸</button>
+      </section></main>`);
+      root.querySelector<HTMLButtonElement>("#lite-retry")?.addEventListener("click", exitBattle);
     }
 
     function render(): void {
@@ -178,155 +147,116 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
         exitBattle();
         return;
       }
-      if (battle.status === "defeat") return resultScreen();
-      const isPlayer = battle.phase === "player";
-      const intent = getEnemyIntent(battle);
+      if (battle.status === "defeat") {
+        result();
+        return;
+      }
+      const myTurn = battle.phase === "player";
+      const economy = getFluxEconomy(battle);
+      const attack = getEnemyIntent(battle);
       const action = selectedAction();
-      const proposal = action && isPlayer ? previewAction(battle, action) : null;
-      const choices = ACTOR_ACTIONS[actorId];
-      const phaseLabel = isPlayer ? "1 · Vos ordres" : "2 · Riposte adverse";
-      const enemyPanel = isPlayer
-        ? `<div class="enemy-warning"><span class="eyebrow">RIPOSTE SI VOUS TERMINEZ LE TOUR</span>
-            <strong>${safeText(intent.description)}</strong>
-            <small>L'ennemi réagit uniquement quand vous cliquez « Terminer le tour ».</small></div>`
-        : `<div class="enemy-warning active"><span class="eyebrow">RIPOSTE RÉSOLUE · TOUR ${battle.round}</span>
-            <strong>${safeText((lastRiposte ?? intent).description)}</strong>
-            <small>Consultez les changements sur le plateau, puis lancez votre tour suivant.</small></div>`;
-
-      const previewPanel = isPlayer
-        ? `<section class="command-preview" aria-live="polite">
-            <span class="eyebrow">PRÉVISUALISATION · AUCUNE ACTION ENCORE EXÉCUTÉE</span>
-            <h3>${safeText(proposal?.title ?? "Choisissez une case de déplacement")}</h3>
-            <p>${safeText(proposal?.description ?? "Cliquez une case voisine libre sur le plateau.")}</p>
-            ${proposal?.distance !== undefined
-              ? `<div class="range-info"><strong>Distance : ${proposal.distance} cases</strong><span>Portée : ${proposal.range} cases</span></div>`
-              : ""}
-            ${proposal ? `<div class="range-info"><strong>Coût : ${proposal.cost} Flux</strong><span>Après action : ${proposal.fluxAfter}/${battle.maxFlux} Flux</span></div>` : ""}
-            ${proposal?.reason ? `<p class="preview-error">⚠ ${safeText(proposal.reason)}</p>`
-              : proposal ? '<p class="preview-valid">Action possible : vérifiez ses effets avant de confirmer.</p>' : ""}
-            ${feedback ? `<p class="preview-error">${safeText(feedback)}</p>` : ""}
-            <button type="button" class="pixel-button primary confirm-action" data-confirm
-              ${!proposal?.ok ? "disabled" : ""}>Confirmer l'action ▸</button>
-          </section>`
-        : `<section class="command-preview enemy-phase">
-            <span class="eyebrow">TOUR ${battle.round} · PHASE ENNEMIE TERMINÉE</span>
-            <h3>À votre tour de préparer la suite.</h3>
-            <p>Les dépenses de Flux appartiennent au tour précédent. Vous récupérerez ${battle.maxFlux} Flux en commençant le prochain tour.</p>
-            <button type="button" class="pixel-button primary confirm-action" data-next>Commencer le tour ${battle.round + 1} ▸</button>
-          </section>`;
-
-      const root = setScreen(`
-        <main class="battle-screen battle-v2">
-          <div class="battle-v2-content">
-            <header class="combat-top">
-              <div><span class="eyebrow">COMBAT TACTIQUE · ${session.battleKind === "training" ? "FORMATION" : "MISSION"}</span>
-                <h1>Guerre de Flux</h1>
-                <p>${session.battleKind === "training"
-                  ? "Désactiver l'émetteur, puis lancer la neutralisation."
-                  : "Désactiver l'émetteur et le relais, puis lancer la neutralisation."}</p></div>
-              <div class="combat-resources">
-                <strong>TOUR ${battle.round}</strong>
-                <span>FLUX <b>${battle.flux}/${battle.maxFlux}</b></span>
-                <span>RÉSEAU <b>${battle.integrity}/${battle.maxIntegrity}</b></span>
-                <span>PROTECTION <b>${battle.guard}</b></span>
-              </div>
-            </header>
-            <div class="combat-phase-strip">
-              <span class="${isPlayer ? "current" : "complete"}">1 · Vos ordres</span><span class="${!isPlayer ? "current" : ""}">2 · Riposte ennemie</span><span>3 · Tour suivant</span>
-              <small>${isPlayer ? "Plusieurs actions possibles tant qu'il reste du Flux. Rien ne se joue avant confirmation." : "La riposte est terminée. Validez pour récupérer le Flux."}</small>
+      const proposal = myTurn && action ? previewAction(battle, action) : null;
+      const choiceButtons = ORDERS[actorId].map((name) => `<button type="button" class="lite-command ${name === order ? "chosen" : ""}"
+          data-order="${name}" ${!myTurn ? "disabled" : ""} aria-pressed="${name === order}">
+          ${LABEL[name]} <small>${COST[name]}⚡</small></button>`).join("");
+      const options = proposal
+        ? `<strong>${e(proposal.title)}</strong><span>${e(proposal.description)}</span>
+           ${proposal.distance !== undefined ? `<small>${proposal.distance} cases / portée ${proposal.range}</small>` : ""}
+           ${proposal.reason ? `<em class="lite-invalid">${e(proposal.reason)}</em>` : ""}
+           <button type="button" class="lite-confirm" data-confirm ${!proposal.ok ? "disabled" : ""}>Confirmer · −${proposal.cost}⚡</button>`
+        : `<span>Sélectionnez une case libre à côté de ${e(actor().operator)}.</span>`;
+      const control = myTurn ? `<div class="lite-control">
+          <div class="lite-character"><small>Personnage actif</small><b>${e(actor().operator)}</b>
+            <span>${e(actor().name)}</span></div>
+          <div class="lite-orders">${choiceButtons}</div>
+          <div class="lite-preview">${options}</div>
+          <button type="button" class="lite-end" data-end>Fin du tour →</button>
+        </div>`
+        : `<div class="lite-enemy-phase">
+          <div><small>RIPOSTE ENNEMIE · TOUR ${battle.round}</small><strong>${e(battle.log[battle.log.length - 1])}</strong>
+            <span>Votre source produit à nouveau au début du prochain tour.</span></div>
+          <button type="button" data-next>Tour ${battle.round + 1} →</button>
+        </div>`;
+      const helpOverlay = help ? `<aside class="lite-help" role="dialog" aria-modal="true" aria-label="Comment fonctionne le Flux ?">
+        <h2>Flux : 3 choses à retenir</h2>
+        <p><strong>✦ La cellule</strong> fabrique l'énergie à chaque nouveau tour. Blessée, elle produit moins ; détruite, vous perdez.</p>
+        <p><strong>◈ Darla</strong> la protège à 2 cases ou moins. « Protéger » consomme 2 Flux pour absorber la prochaine attaque.</p>
+        <p><strong>⚡ Énergie disponible</strong> = production − entretien des modules. Une attaque consomme le Flux restant du tour.</p>
+        <p>Appuyez sur « Fin du tour » pour laisser agir l'ennemi, puis sur « Tour suivant » pour produire à nouveau.</p>
+        <button type="button" data-help>Revenir au combat</button>
+      </aside>` : "";
+      const root = setScreen(`<main class="combat-lite">
+        <div class="lite-shell">
+          <header class="lite-top">
+            <div class="lite-title"><span>${battle.kind === "training" ? "FORMATION WUA" : "MISSION EXTÉRIEURE"} · TOUR ${battle.round}</span><h1>Guerre de Flux</h1></div>
+            <div class="lite-resource" title="La cellule produit du Flux à chaque tour ; les modules ont un coût de veille.">
+              <strong>⚡ ${battle.flux}</strong>
+              <span>Cellule +${economy.produced} · veille −${economy.upkeep} = ${economy.available}/tour</span>
             </div>
-            <div class="combat-main-layout">
-              ${arena()}
-              <aside class="combat-command">
-                <div class="actor-line">
-                  <div><span class="eyebrow">OPÉRATEUR SÉLECTIONNÉ</span><strong>${actor().operator}</strong>
-                    <small>${safeText(actor().name)} · ${actor().hp}/${actor().maxHp} PV</small></div>
-                  <div class="actor-step">Étape 1 · choisir une unité<br>Étape 2 · choisir un ordre<br>Étape 3 · cibler puis confirmer</div>
-                </div>
-                <div class="command-actions" aria-label="Choix des ordres">
-                  ${choices.map((item) => `<button type="button" data-choice="${item}" aria-pressed="${choice === item}" class="pixel-button ${choice === item ? "selected" : ""}" ${!isPlayer ? "disabled" : ""}>
-                    ${LABELS[item]} <span>${item === "move" ? 1 : item === "cut" ? 3 : 2} Flux</span></button>`).join("")}
-                </div>
-                ${previewPanel}
-                ${enemyPanel}
-                ${isPlayer ? '<button type="button" class="pixel-button end-phase" data-end>Terminer le tour · Déclencher la riposte ▸</button>' : ""}
-              </aside>
-            </div>
-            <section class="combat-status-row">
-              <div class="network-summary"><h3>Votre équipe <small>Cliquer pour choisir un opérateur</small></h3>
-                <div class="network-pills">${battle.player.map((item) => modulePill(item, item.id === actorId || (choice === "repair" && item.id === friendlyTarget), "ally")).join("")}</div>
-              </div>
-              <div class="network-summary"><h3>Modules adverses <small>Cliquer pour cibler</small></h3>
-                <div class="network-pills">${battle.enemy.map((item) => modulePill(item, item.id === enemyTarget, "enemy")).join("")}</div>
-              </div>
-            </section>
-            <footer class="combat-log" aria-live="polite"><span class="eyebrow">JOURNAL · ${phaseLabel}</span>
-              ${battle.log.slice(-3).map((line) => `<span>${safeText(line)}</span>`).join("")}</footer>
-          </div>
-        </main>`);
+            <button type="button" class="lite-help-button" data-help aria-label="Comprendre le Flux">?</button>
+          </header>
+          ${battlefield()}
+          <div class="lite-danger"><span class="lite-danger-icon">!</span><span>${e(attack.description)}</span>
+            <small>${myTurn ? "Prochaine riposte" : "Résultat de la riposte"} · Source ${source().hp}/${source().maxHp} PV</small></div>
+          ${control}
+          ${warning ? `<div class="lite-toast" role="status">${e(warning)}</div>` : ""}
+        </div>
+        ${helpOverlay}
+      </main>`);
 
-      root.querySelectorAll<HTMLButtonElement>("[data-choice]").forEach((button) => {
+      root.querySelectorAll<HTMLButtonElement>("[data-x]").forEach((button) => {
         button.addEventListener("click", () => {
-          choice = button.dataset.choice as Choice;
-          tileTarget = null;
-          feedback = "";
-          render();
-        });
-      });
-      root.querySelectorAll<HTMLButtonElement>("[data-module]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const id = button.dataset.module!;
-          if (id.startsWith("e-")) enemyTarget = id;
-          else if (choice === "repair") friendlyTarget = id;
-          else {
-            actorId = id;
-            choice = ACTOR_ACTIONS[id][0];
-            tileTarget = null;
-          }
-          feedback = "";
-          render();
-        });
-      });
-      root.querySelectorAll<HTMLButtonElement>("[data-col]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const point = { col: Number(button.dataset.col), row: Number(button.dataset.row) };
-          const ally = battle.player.find((unit) => distance(unit.position, point) === 0);
-          const enemy = battle.enemy.find((unit) => distance(unit.position, point) === 0);
-          if (enemy) enemyTarget = enemy.id;
-          else if (ally) {
-            if (choice === "repair") friendlyTarget = ally.id;
+          if (!myTurn) return;
+          const point = { col: Number(button.dataset.x), row: Number(button.dataset.y) };
+          const unit = [...battle.player, ...battle.enemy].find((candidate) => distance(candidate.position, point) === 0);
+          if (unit?.id.startsWith("e-")) targetEnemy = unit.id;
+          else if (unit?.id === "p-source") {
+            actorId = "p-support";
+            order = "repair";
+            targetFriend = "p-source";
+          } else if (unit?.id.startsWith("p-")) {
+            if (order === "repair") targetFriend = unit.id;
             else {
-              actorId = ally.id;
-              choice = ACTOR_ACTIONS[ally.id][0];
-              tileTarget = null;
+              actorId = unit.id;
+              order = ORDERS[unit.id][0];
             }
           } else {
-            choice = "move";
-            tileTarget = point;
+            order = "move";
+            targetTile = point;
           }
-          feedback = "";
+          warning = "";
+          render();
+        });
+      });
+      root.querySelectorAll<HTMLButtonElement>("[data-order]").forEach((button) => {
+        button.addEventListener("click", () => {
+          order = button.dataset.order as Order;
+          targetTile = null;
+          warning = "";
           render();
         });
       });
       root.querySelector<HTMLButtonElement>("[data-confirm]")?.addEventListener("click", () => {
-        const current = selectedAction();
-        if (!current) return;
-        const result = performAction(battle, current);
-        feedback = result.ok ? "" : result.reason;
-        if (result.ok && choice === "move") tileTarget = null;
+        const requested = selectedAction();
+        if (!requested) return;
+        const result = performAction(battle, requested);
+        warning = result.ok ? "" : result.reason;
+        if (result.ok && order === "move") targetTile = null;
         render();
       });
       root.querySelector<HTMLButtonElement>("[data-end]")?.addEventListener("click", () => {
-        lastRiposte = getEnemyIntent(battle);
-        const result = performAction(battle, { type: "end" });
-        feedback = result.ok ? "" : result.reason;
+        performAction(battle, { type: "end" });
         render();
       });
       root.querySelector<HTMLButtonElement>("[data-next]")?.addEventListener("click", () => {
         performAction(battle, { type: "next" });
-        lastRiposte = null;
-        feedback = "";
         render();
+      });
+      root.querySelectorAll<HTMLButtonElement>("[data-help]").forEach((button) => {
+        button.addEventListener("click", () => {
+          help = !help;
+          render();
+        });
       });
     }
     render();
