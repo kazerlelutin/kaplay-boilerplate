@@ -81,7 +81,7 @@ test("L'écran ennemi et le relais verrouillent son noyau", () => {
 
 test("Le coupe-flux retire les réserves de la cible", () => {
   const state = startOrders();
-  findModule(state.player, "p-support")!.position = { col: 2, row: 3 };
+  findModule(state.player, "p-support")!.position = { col: 3, row: 2 };
   findModule(state.enemy, "e-weapon")!.energy = 4;
   performAction(state, { type: "cut", target: "e-weapon", power: 3 });
   assert.equal(findModule(state.enemy, "e-weapon")!.energy, 2);

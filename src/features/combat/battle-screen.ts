@@ -1,8 +1,8 @@
 import type { KAPLAYCtx } from "kaplay";
 import type { GameSession } from "../../game/session";
 import {
-  BOARD_COLUMNS, BOARD_ROWS, OBSTACLES,
-  createBattle, distance, enemySourceExposed, findModule,
+  BOARD_COLUMNS, BOARD_ROWS, OBSTACLES, COVER, JAMMERS, moveCost,
+  advanceRealtimeCycle, createBattle, distance, enemySourceExposed, findModule,
   getEnemyIntent, getFluxEconomy, isBoardCellFree,
   performAction, previewAction,
   type BattleAction, type BattleEvent, type BattleModule, type Point,
@@ -10,15 +10,15 @@ import {
 import { completeBattle } from "./finish";
 import { setScreen } from "../../shared/ui/screen";
 
-type Order = "attack" | "cut" | "repair" | "guard" | "move" | "transfer" | "neutralize";
+type Order = "attack" | "cut" | "repair" | "guard" | "move" | "transfer" | "neutralize" | "tune";
 const ACTIONS: Record<string, Order[]> = {
   "p-weapon": ["attack", "transfer", "move"],
   "p-barrier": ["guard", "transfer", "move"],
-  "p-support": ["cut", "repair", "transfer", "neutralize", "move"],
+  "p-support": ["cut", "repair", "tune", "transfer", "neutralize", "move"],
 };
 const TITLES: Record<Order, string> = {
   attack: "Frapper", cut: "Coupe-flux", repair: "Réparer",
-  guard: "Bouclier", move: "Bouger", transfer: "Donner du Flux", neutralize: "Neutraliser",
+  guard: "Bouclier", move: "Bouger", transfer: "Donner du Flux", neutralize: "Neutraliser", tune: "Optimiser",
 };
 const ICONS: Record<string, string> = {
   "p-weapon": "K", "p-barrier": "D", "p-support": "L", "p-source": "✦",
@@ -55,6 +55,9 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
     let exiting = false;
     let victoryScheduled = false;
     let lastEnemyEvents: BattleEvent[] = [];
+    let running = false;
+    let cycleElapsed = 0;
+    const cycleSeconds = 3;
 
     const actor = () => findModule(battle.player, actorId)!;
     const producer = () => findModule(battle.player, "p-source")!;
@@ -87,12 +90,13 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
       if (order === "guard") return { type: "guard", power };
       if (order === "transfer") return { type: "transfer", from: actorId, target: allyTarget, amount };
       if (order === "neutralize") return { type: "neutralize" };
+      if (order === "tune") return { type: "tune" };
       return tileTarget ? { type: "move", actor: actorId, to: tileTarget } : null;
     }
 
     function target(): Point | null {
       if (order === "move") return tileTarget;
-      if (order === "guard") return producer().position;
+      if (order === "guard" || order === "tune") return producer().position;
       if (order === "attack" || order === "cut") return findModule(battle.enemy, enemyTarget)?.position ?? null;
       if (order === "neutralize") return findModule(battle.enemy, "e-weapon")!.position;
       return findModule(battle.player, allyTarget)?.position ?? null;
@@ -100,7 +104,7 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
 
     function sourceUnit(): BattleModule {
       if (order === "guard") return findModule(battle.player, "p-barrier")!;
-      if (order === "cut" || order === "neutralize" || order === "repair") return findModule(battle.player, "p-support")!;
+      if (order === "cut" || order === "neutralize" || order === "repair" || order === "tune") return findModule(battle.player, "p-support")!;
       return actor();
     }
 
@@ -130,24 +134,29 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
         ? `<line class="threat-line" x1="${coords(findModule(battle.enemy,"e-weapon")!.position).x}" y1="${coords(findModule(battle.enemy,"e-weapon")!.position).y}"
             x2="${coords(findModule(battle.player, intent.target)!.position).x}" y2="${coords(findModule(battle.player, intent.target)!.position).y}"/>`
         : "";
-      const last = battle.events[battle.events.length - 1];
+      const last = [...lastEnemyEvents, ...battle.events].at(-1);
       let tiles = "";
       for (let row = 0; row < BOARD_ROWS; row++) {
         for (let col = 0; col < BOARD_COLUMNS; col++) {
           const point = { col, row };
           const unit = [...battle.player, ...battle.enemy].find((u) => distance(u.position,point) === 0);
           const rock = OBSTACLES.some((p) => distance(p,point) === 0);
+          const cover = COVER.some((p) => distance(p,point) === 0);
+          const jammer = JAMMERS.some((p) => distance(p,point) === 0);
           const reachable = order === "move" && battle.phase === "player"
-            && isBoardCellFree(battle,point) && distance(actor().position,point) === 1;
+            && isBoardCellFree(battle,point) && moveCost(actor().position,point) !== null
+            && (moveCost(actor().position,point) !== 2
+              || (isBoardCellFree(battle,{col:point.col,row:actor().position.row})
+                && isBoardCellFree(battle,{col:actor().position.col,row:point.row})));
           const targeted = !!to && distance(to,point) === 0;
           const locked = unit?.id === "e-source" && !enemySourceExposed(battle);
-          const cls = ["flow-tile", (row+col)%2 ? "alt" : "", rock ? "rock" : "", reachable ? "walk" : "",
+          const cls = ["flow-tile", (row+col)%2 ? "alt" : "", rock ? "rock" : "", cover ? "cover" : "", jammer ? "jammer" : "", reachable ? "walk" : "",
             targeted && battle.phase === "player" ? "aimed" : "", locked ? "locked" : ""].filter(Boolean).join(" ");
           const label = unit ? `${unit.operator}, ${unit.hp}/${unit.maxHp} PV, ${unit.energy} Flux stocké`
-            : rock ? "Obstacle" : `Case ${col+1}, ${row+1}`;
+            : rock ? "Rocher : obstacle de tir et liaison" : jammer ? "Brouilleur de Flux" : cover ? "Couverture contre les attaques" : `Case ${col+1}, ${row+1}`;
           tiles += `<button type="button" data-pos="${col},${row}" class="${cls}" aria-label="${esc(label)}"
             title="${esc(label)}" ${rock ? "disabled" : ""}>
-            ${unit ? compactUnit(unit,unit.id === actorId,last) : rock ? '<span class="flow-rock">◆</span>' : ""}
+            ${unit ? compactUnit(unit,unit.id === actorId,last) : rock ? '<span class="flow-rock">◆</span>' : jammer ? '<span class="flow-terrain">⌁</span>' : cover ? '<span class="flow-terrain">▥</span>' : ""}
             ${locked ? '<span class="core-lock" aria-label="Noyau protégé">⌁</span>' : ""}
           </button>`;
         }
@@ -186,7 +195,7 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
     function previewPanel(): string {
       const a = action();
       const p = a ? previewAction(battle,a) : null;
-      const required = order === "move" ? 1 : order === "neutralize" ? 2
+      const required = order === "move" ? 1 : order === "neutralize" ? 2 : order === "tune" ? 3
         : order === "transfer" ? amount : power;
       const slider = order === "attack" || order === "cut" || order === "repair" || order === "guard"
         ? `<div class="flow-power"><span>Puissance</span>
@@ -240,6 +249,15 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
       </section>`;
     }
 
+    function runningPanel(): string {
+      return `<section class="flow-enemy-turn flow-live">
+        <span>SIMULATION ACTIVE · CYCLE ${battle.round}</span>
+        <strong>La cellule produit et l'adversaire agit toutes les ${cycleSeconds} secondes.</strong>
+        <div class="flow-enemy-events"><p>${esc(battle.lastEnemyAction || "L'ennemi prépare sa riposte.")}</p>
+          <p>Vous pouvez mettre en pause à tout moment.</p></div>
+        <button type="button" data-toggle-run>⏸ Pause tactique</button>
+      </section>`;
+    }
     function enemyPanel(): string {
       return `<section class="flow-enemy-turn"><span>RIPOSTE ADVERSE · TOUR ${battle.round}</span>
         <strong>L'adversaire a réagi</strong>
@@ -268,18 +286,21 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
       const root = setScreen(`<main class="flow-combat">
         <div class="flow-game">
           <header class="flow-header">
-            <span>TOUR ${battle.round} · ${battle.phase === "allocation" ? "DISTRIBUTION" : battle.phase === "player" ? "VOS ACTIONS" : "RIPOSTE"}</span>
+            <span>${running ? "SIMULATION · CYCLE" : "PAUSE TACTIQUE · CYCLE"} ${battle.round}</span>
             <div class="flow-head-resources">
               <div class="flow-source"><b>✦ ${battle.flux}⚡</b><small>Cellule · +${ecn.available}/tour</small></div>
               <div class="flow-shield"><b>◆ ${battle.guard}</b><small>Barrière</small></div>
+              <button type="button" class="flow-run-toggle" data-toggle-run>${running ? "⏸ Pause" : "▶ Lancer"}</button>
+              <span id="flow-cycle-count" class="flow-countdown">${running ? Math.ceil(cycleSeconds-cycleElapsed)+"s" : "En pause"}</span>
               <button type="button" data-help aria-label="Aide sur le Flux">?</button>
             </div>
           </header>
           ${board()}
           <section class="flow-threat"><strong>${battle.phase === "enemy" ? "Riposte effectuée" : "L'ennemi prépare"}</strong>
             <span>${esc(battle.phase === "enemy" ? battle.lastEnemyAction : intent.description)}</span></section>
-          ${battle.phase === "allocation" ? allocationPanel() : battle.phase === "player" ? actionPanel() : enemyPanel()}
+          ${running ? runningPanel() : battle.phase === "allocation" ? allocationPanel() : battle.phase === "player" ? actionPanel() : enemyPanel()}
           <div class="flow-events" role="status" aria-live="polite">
+            ${battle.lastEnemyAction ? '<span class="flow-event attack">'+esc(battle.lastEnemyAction)+'</span>' : ""}
             ${latest.map((event) => `<span class="flow-event ${event.kind}">${esc(event.text)}</span>`).join("")}
           </div>
           ${warning ? `<div class="flow-warning" role="alert">${esc(warning)}</div>` : ""}
@@ -288,7 +309,7 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
       </main>`);
 
       root.querySelectorAll<HTMLButtonElement>("[data-pos]").forEach((button) => button.addEventListener("click", () => {
-        if (battle.phase !== "player" && battle.phase !== "allocation") return;
+        if (running || (battle.phase !== "player" && battle.phase !== "allocation")) return;
         const [col,row] = button.dataset.pos!.split(",").map(Number);
         const point = {col,row};
         const unit = [...battle.player, ...battle.enemy].find((u) => distance(u.position,point) === 0);
@@ -353,8 +374,8 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
         render();
       });
       root.querySelector<HTMLButtonElement>("[data-end]")?.addEventListener("click",() => {
-        performAction(battle,{type:"end"});
-        lastEnemyEvents = battle.events.slice();
+        running = true;
+        cycleElapsed = 0;
         render();
       });
       root.querySelector<HTMLButtonElement>("[data-next]")?.addEventListener("click",() => {
@@ -362,11 +383,28 @@ export function registerBattleScene(k: KAPLAYCtx, session: GameSession): void {
         lastEnemyEvents = [];
         render();
       });
+      root.querySelectorAll<HTMLButtonElement>("[data-toggle-run]").forEach((button) => button.addEventListener("click",() => {
+        if (!running && battle.phase === "allocation") performAction(battle,{type:"orders"});
+        running = !running;
+        cycleElapsed = 0;
+        render();
+      }));
       root.querySelectorAll<HTMLButtonElement>("[data-help]").forEach((button) => button.addEventListener("click",() => {
         help = !help;
         render();
       }));
     }
+    k.onUpdate(() => {
+      if (!running || battle.status !== "active") return;
+      cycleElapsed += k.dt();
+      const clock = document.querySelector<HTMLElement>("#flow-cycle-count");
+      if (clock) clock.textContent = Math.max(0,Math.ceil(cycleSeconds-cycleElapsed))+"s";
+      if (cycleElapsed < cycleSeconds) return;
+      cycleElapsed -= cycleSeconds;
+      advanceRealtimeCycle(battle);
+      lastEnemyEvents = battle.events.slice();
+      render();
+    });
     render();
   });
 }
