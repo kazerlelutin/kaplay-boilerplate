@@ -1,6 +1,6 @@
 import type { KAPLAYCtx } from "kaplay";
 import type { GameSession } from "../../game/session";
-import { setScreen } from "../../shared/ui/screen";
+import { setScreen } from "../../shared/ui/screen.ts";
 
 interface PrologueBeat { place:string; title:string; text:string; action:string; tone:string }
 /** Prologue linéaire : rêve, réveil, fenêtre, appel WUA. */

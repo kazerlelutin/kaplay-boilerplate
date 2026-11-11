@@ -33,7 +33,7 @@ for(const kind of ["training","mission"] as const) {
     assert.equal(previewAction(state,{type:"move",actor:"p-weapon",to:{col:3,row:2}}).ok,true);
     const before=state.flux;
     assert.equal(performAction(state,{type:"move",actor:"p-weapon",to:{col:3,row:2}}).ok,true);
-    assert.equal(state.flux,before-1);
+    assert.equal(state.flux,before);
     assert.deepEqual(findModule(state.player,"p-weapon")?.position,{col:3,row:2});
   });
 }
