@@ -1,12 +1,13 @@
 {
-  "name": "my-game",
+  "name": "the-dunblane-quest",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "devDependencies": {
     "typescript": "~7.0.2",

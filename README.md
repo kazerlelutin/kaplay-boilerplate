@@ -1,121 +1,104 @@
-# Blob & Coins — petit jeu de plateforme
+# The Dunblane Quest — MVP jouable
 
-Un mini jeu de plateforme réalisé avec [KAPLAY](https://kaplayjs.com) et les
-assets gratuits [Kenney](https://kenney.nl) (CC0). Ramasse les pièces, trouve
-la clé, évite les ennemis et rejoins la porte !
+Premier parcours vertical de **The Dunblane Quest** : RPG d'exploration 2D isométrique à l'esthétique 16 bits, avec des combats tactiques hybrides (temps réel et pause) utilisant le réseau de **Flux**.
 
-Ce guide explique comment lancer le jeu **sans rien connaître au
-développement**. Suis les étapes dans l'ordre, ça prend 5 minutes.
+Les graphismes sont volontairement provisoires (formes dessinées par KAPLAY).
 
----
+## Démarrer
 
-## 1. Installer Bun
-
-Bun est l'outil qui va télécharger les dépendances et lancer le jeu.
-Tu n'auras à faire cette étape qu'une seule fois.
-
-Ouvre un terminal :
-
-- **Windows** : touche `Windows`, tape `PowerShell`, touche `Entrée`
-- **macOS** : `Cmd + Espace`, tape `Terminal`, touche `Entrée`
-- **Linux** : cherche « Terminal » dans tes applications
-
-Puis copie-colle la commande qui correspond à ton système et valide avec
-`Entrée` :
-
-**macOS / Linux :**
-
-```bash
-curl -fsSL https://bun.sh/install | bash
-```
-
-**Windows (PowerShell) :**
-
-```powershell
-powershell -c "irm bun.sh/install.ps1 | iex"
-```
-
-Une fois l'installation terminée, **ferme et rouvre le terminal**, puis
-vérifie que tout est bon :
-
-```bash
-bun --version
-```
-
-Si un numéro de version s'affiche (par exemple `1.3.14`), c'est réussi. ✅
-
-## 2. Télécharger les dépendances du jeu
-
-Dans le terminal, déplace-toi dans le dossier du projet. Exemple (adapte le
-chemin selon l'endroit où tu as mis le dossier) :
-
-```bash
-cd kaplay-boilerplate
-```
-
-Puis installe les dépendances :
+Prérequis : [Bun](https://bun.sh/), navigateur récent.
 
 ```bash
 bun install
-```
-
-Ça ne prend que quelques secondes. Cette étape n'est à refaire que si tu
-supprimes le dossier `node_modules`.
-
-## 3. Lancer le jeu
-
-Toujours dans le terminal, depuis le dossier du projet :
-
-```bash
 bun run dev
 ```
 
-Le terminal affiche une adresse qui ressemble à :
+Ouvrir l'URL affichée par Vite (habituellement http://localhost:5173).
 
-```
-➜  Local:   http://localhost:5173/
-```
+## Jouer
 
-Ouvre cette adresse dans ton navigateur (Chrome, Firefox, Edge…) : le jeu
-démarre. 🎮
+1. Depuis le titre, choisir **Commencer**.
+2. Dans la cour de la WUA, approcher l'instructeur violet et appuyer sur **E** ou **Entrée**.
+3. Dans le simulateur, désactiver l'émetteur adverse puis cliquer **Neutraliser**.
+4. Dans la cour, rejoindre le portail doré pour sortir.
+5. Dans les ruines, récupérer le cristal turquoise, puis approcher l'adversaire rouge.
+6. En combat réel, désactiver **l'émetteur et le relais**, puis cliquer **Neutraliser**.
+7. Après avoir confirmé la neutralisation, le combat se ferme automatiquement et vous revenez dans la zone précédente. Rejoindre ensuite le point d'extraction bleu pour lire le rapport WUA.
 
-> Le terminal doit **rester ouvert** pendant que tu joues.
-> Pour arrêter le jeu : retourne dans le terminal et fais `Ctrl + C`.
+**Déplacements** : flèches ou ZQSD (une case par pression). **Interactions** : E, Entrée ou Espace.
+**Combat : les actions demandent directement leur énergie au réseau.** La répartition manuelle (+1/+3) n'est plus obligatoire. Choisissez un personnage, une action et une cible : l'aperçu montre le coût et la chaîne d'alimentation choisie. Cliquez sur **Confirmer** pour exécuter. Le moteur puise d'abord dans la réserve de l'opérateur, ensuite chez les alliés connectés, enfin dans la cellule. Un relais intermédiaire peut être vide : il transmet l'énergie sans la consommer.
 
-## Contrôles
+**Si la chaîne est rompue**, un lien orange apparaît et la prévisualisation explique pourquoi : distance entre deux unités, obstacle ou brouilleur. Les réserves déjà stockées permettent tout de même à une unité isolée de continuer à agir. Une action ne prélève jamais d'énergie lors de sa prévisualisation. Les unités conservent leurs réserves entre les cycles (9 Flux max par opérateur, 12 à la cellule).
 
-| Action | Touches |
-| --- | --- |
-| Se déplacer | `←` `→` ou `A` `D` |
-| Sauter | `Espace`, `↑` ou `W` |
-| Recommencer le niveau | `R` |
-| Rejouer après victoire / défaite | `Entrée` |
+**Simulation hybride** : le combat commence en pause tactique. **Espace** ou le bouton **▶ Lancer / ⏸ Pause** démarre ou suspend la simulation. Le générateur produit de l'énergie **chaque seconde** ; les ennemis se déplacent et réagissent **toutes les 3 secondes**. Les déplacements, impacts, réparations et recharges adverses apparaissent sur le terrain et dans un récapitulatif agrandi.
 
-**Objectif** : ramasse des pièces, trouve la **clé** pour ouvrir la porte,
-et évite les ennemis et les gouffres. Tu as 3 vies. Bonne chance !
+**Commandes clavier** : **1, 2, 3** pour Kumji, Darla, Lyrius ; **4 à 9** pour les actions contextuelles ; **flèches** ou **ZQSD** pour préparer un déplacement orthogonal ; **A/E/W/C** pour une diagonale ; **Entrée** pour confirmer ; **Espace** pour mettre en pause/reprendre. Les boutons +/− permettent d'ajuster la puissance des actions.
 
-## Problèmes fréquents
+**Production et rôles** : la cellule intacte produit **2 Flux par seconde**, avec une réserve de 12. Lyrius peut investir 3 Flux pour augmenter durablement cette cadence de +1/seconde, jusqu'à +3 ; il peut aussi réparer. Darla protège la source ; Kumji frappe en fonction de la puissance dépensée. La barrière et le relais ennemis doivent être coupés avant de cibler directement le noyau, mais la neutralisation non létale reste possible.
 
-- **`bun : commande introuvable`** → ferme et rouvre le terminal après
-  l'installation de Bun (étape 1).
-- **La page ne s'ouvre pas / « site inaccessible »** → vérifie que
-  `bun run dev` tourne toujours dans le terminal, et que tu utilises bien
-  l'adresse affichée (http://localhost:5173/).
-- **« Port 5173 is in use »** → un autre programme utilise le port. Vite en
-  propose un autre automatiquement (par exemple 5174) : utilise l'adresse
-  affichée dans le terminal.
+**Retours audiovisuels** : des sons synthétiques peuvent être coupés par le bouton ♪. Un projectile animé indique les attaques, les PV restent visibles sur les unités, et le bouclier de Darla apparaît autour de la cellule lorsqu'il est actif. Une action peut être confirmée par **double-clic sur sa cible** après la première sélection, ou avec Entrée.
 
-## Pour aller plus loin (optionnel)
+**Compétences spéciales** : Kumji possède une **frappe de rupture** à 6 Flux, Darla crée un **dôme protecteur** à 5 Flux, Lyrius déclenche une **impulsion EMP** à 5 Flux (draine les réserves ennemies et coupe les liaisons). Le **coupe-flux ordinaire** n'est plus un simple tir : il inflige peu de dégâts, mais retire l'énergie ennemie et perturbe sa recharge. La **neutralisation** met fin au combat sans détruire le générateur, lorsque les modules critiques sont neutralisés.
 
-Générer une version autonome du site (dossier `dist/`, à mettre sur
-n'importe quel hébergement statique) :
+**Remise en service adverse** : une arme désactivée attend deux réactions ennemies avant qu'un relais puisse la réparer, puis une réaction supplémentaire pour la redémarrer. L'adversaire de mission possède également un éclaireur spécialisé mobile, différent du réseau du joueur.
+
+**Terrain** : les déplacements diagonaux coûtent 2 Flux (1 en orthogonal). Les rochers bloquent mouvements et tirs, les couverts ▥ réduisent les dégâts, les brouilleurs ⌁ bloquent les transmissions. La cellule peut alimenter un allié directement à 4 cases ; les alliés relaient entre eux à 3 cases sans obstacle, ce qui étend la portée pratique du réseau.
+
+
+## Vérifications
 
 ```bash
+bun run test
 bun run build
 ```
 
----
+Les tests portent sur la logique métier : allocation, persistance des réserves, boost d'attaque, transfert, barrières du générateur adverse, réactions ennemies, distance, déplacements et sorties de combat.
+La CI GitHub Actions exécute les tests et le build sur chaque PR.
 
-- Moteur de jeu : [KAPLAY](https://kaplayjs.com) 4000 (alpha)
-- Graphismes : [Kenney — 1-Bit Platformer Pack](https://kenney.nl/assets/1-bit-platformer-pack),
-  licence CC0 (voir `LICENSE-kenney.txt`)
+## Structure
+
+```text
+src/
+  game/            # Configuration KAPLAY et état de session
+  scenes/title/    # Accueil
+  features/
+    combat/domain/ # Règles de Flux, modules, dégâts, IA, neutralisation
+    combat/        # Interface de combat 2D
+    exploration/   # Cartes, déplacements, projection 2:1
+    dialogue/      # Dialogues scénarisés
+    mission/       # Rapport WUA
+  shared/ui/       # Conteneur DOM des interfaces
+tests/             # Tests de logique métier
+features/          # Scénarios Gherkin
+docs/PROTOTYPE.md  # Périmètre, limites et prochaines itérations
+```
+
+**Architecture** : exploration et scènes rendues par KAPLAY ; interfaces de dialogue/combat/rapport en DOM ; calculs de combat en TypeScript pur et testables hors navigateur.
+
+## Limites de cette tranche
+
+- Deux cartes d'exploration très petites et deux combats prédéfinis (plateau tactique 13 × 7).
+- Graphismes et animations non définitifs.
+- Pas encore de sauvegarde, d'inventaire, de chimères, de monde ouvert ni de progression persistante.
+- Déplacement case par case, clavier sur bureau ; commandes tactiles non implémentées.
+- L'équilibrage, le ressenti et les transitions visuelles nécessiteront des tests de jeu.
+
+Le document [docs/PROTOTYPE.md](docs/PROTOTYPE.md) conserve le périmètre et les étapes suivantes.
+
+## Déployer sur CapRover
+
+Le jeu est une application Vite statique : aucune API, base de données ou volume n'est nécessaire pour le prototype. Le `Dockerfile` multi-stage installe les dépendances avec Bun et construit `dist/`, puis NGINX sert exclusivement les fichiers de jeu sur le **port 80**. Le build ne contient pas les dépendances de développement.
+
+1. Dans **CapRover → Apps**, créer une application web (par exemple `the-dunblane-quest`) avec **Container HTTP Port = 80**.
+2. Dans **Deployment**, déployer la branche souhaitée depuis le dépôt Git ou utiliser la CLI `caprover deploy` après avoir configuré la connexion. Le fichier racine `captain-definition` indique à CapRover de construire l'image avec `./Dockerfile`.
+3. Configurer le domaine et HTTPS depuis **HTTP Settings**, puis vérifier `/healthz` (réponse `ok`).
+4. Pour un contrôle local : `docker build -t the-dunblane-quest .` puis `docker run --rm -p 8080:80 the-dunblane-quest`. Ouvrir `http://localhost:8080`.
+
+L'image sert une SPA avec retour vers `index.html` pour les routes d'application. Les assets versionnés de Vite sont cachés longtemps, tandis que l'HTML reste non mis en cache. **Aucune image n'est automatiquement publiée sur un registre** : CapRover peut la construire depuis le dépôt, ou elle peut être construite et publiée séparément si nécessaire.
+
+
+## Mise à jour novembre 2026 — scénario de démo et nouveau Flux
+
+Le parcours jouable suit désormais le scénario transmis : rêve de Kumji, réveil, convocation du directeur, mission avec Darla et Lyrius, cellule de Flux dans la plaine, anomalie et combat, vision d'un démon mystérieux, retour à la WUA et rapport. Le combat d'entraînement obligatoire a été retiré du trajet principal.
+
+**Règles révisées :** déplacement gratuit en Flux (budget de 3 points de déplacement par cycle), attaque 1 Flux, coupe-flux/réparation 2 Flux, limites 3 Flux, production plafonnée à 8 par cycle. Les magies canalisées à 2 Flux et les chimères à 6 Flux sont définies dans les règles mais restent hors démo. Les limites s'appellent **Coups foudroyants**, **Mégatemps** et **Martial** ; leurs effets actuels sont provisoires. Voir `docs/PROTOTYPE.md`.
