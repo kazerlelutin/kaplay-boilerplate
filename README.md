@@ -96,3 +96,9 @@ Le jeu est une application Vite statique : aucune API, base de données ou volum
 
 L'image sert une SPA avec retour vers `index.html` pour les routes d'application. Les assets versionnés de Vite sont cachés longtemps, tandis que l'HTML reste non mis en cache. **Aucune image n'est automatiquement publiée sur un registre** : CapRover peut la construire depuis le dépôt, ou elle peut être construite et publiée séparément si nécessaire.
 
+
+## Mise à jour novembre 2026 — scénario de démo et nouveau Flux
+
+Le parcours jouable suit désormais le scénario transmis : rêve de Kumji, réveil, convocation du directeur, mission avec Darla et Lyrius, cellule de Flux dans la plaine, anomalie et combat, vision d'un démon mystérieux, retour à la WUA et rapport. Le combat d'entraînement obligatoire a été retiré du trajet principal.
+
+**Règles révisées :** déplacement gratuit en Flux (budget de 3 points de déplacement par cycle), attaque 1 Flux, coupe-flux/réparation 2 Flux, limites 3 Flux, production plafonnée à 8 par cycle. Les magies canalisées à 2 Flux et les chimères à 6 Flux sont définies dans les règles mais restent hors démo. Les limites s'appellent **Coups foudroyants**, **Mégatemps** et **Martial** ; leurs effets actuels sont provisoires. Voir `docs/PROTOTYPE.md`.

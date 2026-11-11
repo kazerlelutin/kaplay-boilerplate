@@ -21,7 +21,7 @@ const COMMANDS: Record<string, Command[]> = {
 };
 const NAMES: Record<Command,string> = {
   attack:"Frapper",cut:"Coupe-flux",guard:"Bouclier",repair:"Réparer",
-  tune:"Optimiser",neutralize:"Neutraliser",move:"Déplacer",special:"Coup spécial",
+  tune:"Optimiser",neutralize:"Neutraliser",move:"Déplacer",special:"Limite",
 };
 const ICONS: Record<string,string> = {
   "p-weapon":"K","p-barrier":"D","p-support":"L","p-source":"✦",
@@ -45,7 +45,6 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     let enemyId = "e-weapon";
     let allyId = "p-source";
     let destination:Point|null = null;
-    let power = 3;
     let help = false;
     let running = false;
     let elapsed = 0;
@@ -61,10 +60,10 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     const actor = () => findModule(battle.player,actorId)!;
     const lookup = (id:string) => [...battle.player,...battle.enemy].find(u=>u.id===id);
     const activeCommand = ():BattleAction|null => {
-      if (command==="attack" || command==="cut")
-        return {type:command,target:enemyId,power};
-      if (command==="repair") return {type:"repair",target:allyId,power};
-      if (command==="guard") return {type:"guard",power};
+      if (command==="attack") return {type:"attack",target:enemyId,power:1};
+      if (command==="cut") return {type:"cut",target:enemyId,power:2};
+      if (command==="repair") return {type:"repair",target:allyId,power:2};
+      if (command==="guard") return {type:"guard",power:1};
       if (command==="tune") return {type:"tune"};
       if (command==="neutralize") return {type:"neutralize"};
       if (command==="special") return {type:"special",actor:actorId,target:enemyId};
@@ -166,11 +165,6 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       const from=actor().position;
       destination={col:from.col+dx,row:from.row+dy};
       warning="";
-      render();
-    }
-    function changePower(delta:number):void {
-      if (running || battle.status!=="active") return;
-      power=Math.max(2,Math.min(6,power+delta));
       render();
     }
 
@@ -307,7 +301,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     }
     function commands():string {
       if (running) return `<section class="rpg-toolbar live">
-        <span>Énergie +${fluxPerSecond(battle)}⚡ chaque seconde · ennemis toutes les ${CYCLE_SECONDS}s.</span>
+        <span>Énergie +${fluxPerSecond(battle)}⚡/s (max 8/cycle) · ennemis toutes les ${CYCLE_SECONDS}s.</span>
         <button type="button" class="rpg-primary" data-pause>⏸ Pause tactique · Espace</button>
       </section>`;
       const choices=COMMANDS[actorId];
@@ -315,7 +309,6 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       const pre=selected?previewAction(battle,selected):null;
       const pathInfo=pre?.fluxPlan?.donors.map(d=>d.path.map(id=>lookup(id)?.operator??id).join(" → ")
         +" ("+d.amount+"⚡)").join(" · ");
-      const needPower=["attack","cut","guard","repair"].includes(command);
       const hpCost=pre?.ok ? (pre.fluxPlan?.hpCost??0) : 0;
       const healthOwner=pre?.source?lookup(pre.source):undefined;
       return `<section class="rpg-toolbar">
@@ -334,10 +327,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         <div class="rpg-preview">
           <div class="rpg-preview-top">
             <strong>${escapeHtml(pre?.title??"Choisissez une case")}</strong>
-            ${needPower?`<span class="rpg-power">
-              <button data-power="-1" aria-label="Moins de puissance">−</button>
-              ${power}⚡
-              <button data-power="1" aria-label="Plus de puissance">+</button></span>`:""}
+            ${pre?`<span class="rpg-power">${command==="move"?"0 Flux · mouvement gratuit":pre.cost+" Flux"}</span>`:""}
           </div>
           <p>${escapeHtml(pre?.reason||pre?.description||"Choisissez une case libre.")}</p>
           ${pathInfo?`<small class="rpg-path">⚡ ${escapeHtml(pathInfo)}</small>`:""}
@@ -361,9 +351,11 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
         <p><strong>Énergie de secours :</strong> quand les réserves et le réseau sont insuffisants,
           un personnage peut sacrifier 1 PV pour chaque Flux manquant. La dernière unité de vie
           ne peut pas être dépensée. Le coût est indiqué avant confirmation.</p>
-        <p><strong>Production :</strong> le générateur fabrique ${fluxPerSecond(battle)} Flux chaque seconde, sans attendre l'attaque ennemie.</p>
-        <p><strong>Compétences :</strong> Kumji perce les défenses, Darla invoque un dôme, Lyrius envoie une impulsion EMP.</p>
-        <p><strong>Clavier :</strong> 1–3 personnages, 4–9 actions, flèches ou ZQSD mouvement, A/E/W/C diagonales, +/− puissance, Entrée ou double-clic confirmation, Espace pause/lancer.</p>
+        <p><strong>Déplacements :</strong> aucune dépense de Flux. Vous disposez de trois points de mouvement par cycle : case 1, diagonale 2.</p>
+        <p><strong>Coûts :</strong> attaque 1 Flux ; coupe-flux et réparation 2 ; limite 3 ; chimère 6 (non disponible dans la démo).</p>
+        <p><strong>Production :</strong> le générateur fabrique ${fluxPerSecond(battle)} Flux chaque seconde, dans la limite de 8 par cycle.</p>
+        <p><strong>Limites :</strong> Coups foudroyants (Kumji), Mégatemps (Darla), Martial (Lyrius). Les effets sont provisoires tant que les fiches de compétences détaillées ne sont pas intégrées.</p>
+        <p><strong>Clavier :</strong> 1–3 personnages, 4–9 actions, flèches ou ZQSD mouvement, A/E/W/C diagonales, Entrée ou double-clic confirmation, Espace pause/lancer.</p>
         <button type="button" class="rpg-primary" data-help>Fermer · Échap</button>
       </section></div>`;
     }
@@ -389,7 +381,7 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
             <div><span class="rpg-eyebrow">THE DUNBLANE QUEST · COMBAT</span>
               <strong>${running?"SIMULATION":"PAUSE TACTIQUE"} · CYCLE ${battle.round}</strong></div>
             <div class="rpg-header-stats">
-              <span class="rpg-flux">✦ ${battle.flux}⚡ <small>+${fluxPerSecond(battle)}/seconde</small></span>
+              <span class="rpg-flux">✦ ${battle.flux}⚡ <small>+${fluxPerSecond(battle)}/s · ${battle.fluxProducedThisCycle}/8 ce cycle</small></span>
               <span>◆ ${battle.guard}</span>
               <span id="rpg-clock">${running?Math.ceil(CYCLE_SECONDS-elapsed)+"s":"En pause"}</span>
               <button type="button" class="rpg-main-toggle" data-pause>${running?"⏸ Pause":"▶ Lancer"} <small>Espace</small></button>
@@ -414,7 +406,6 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
       }));
       root.querySelectorAll<HTMLButtonElement>("[data-actor]").forEach(b=>b.addEventListener("click",()=>chooseActor(b.dataset.actor!)));
       root.querySelectorAll<HTMLButtonElement>("[data-order]").forEach(b=>b.addEventListener("click",()=>chooseCommand(b.dataset.order as Command)));
-      root.querySelectorAll<HTMLButtonElement>("[data-power]").forEach(b=>b.addEventListener("click",()=>changePower(Number(b.dataset.power))));
       root.querySelector<HTMLButtonElement>("[data-confirm]")?.addEventListener("click",confirm);
       root.querySelectorAll<HTMLButtonElement>("[data-pause]").forEach(b=>b.addEventListener("click",toggle));
       root.querySelectorAll<HTMLButtonElement>("[data-sound]").forEach(b=>b.addEventListener("click",()=>{
@@ -450,8 +441,6 @@ export function registerBattleScene(k:KAPLAYCtx, session:GameSession):void {
     k.onKeyPress("e",()=>move(1,-1));
     k.onKeyPress("w",()=>move(-1,1));
     k.onKeyPress("c",()=>move(1,1));
-    k.onKeyPress("=",()=>changePower(1));
-    k.onKeyPress("-",()=>changePower(-1));
 
     k.onUpdate(()=>{
       if(feedbackFor>0) {

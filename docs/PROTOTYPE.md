@@ -1,40 +1,32 @@
-# The Dunblane Quest — MVP
+# The Dunblane Quest — démo scénarisée (novembre 2026)
 
-## Tranche implémentée
+## Scénario jouable (source : « Scénario de la démo »)
 
-- Écran de titre et retour au début.
-- WUA : cour isométrique, instructeur, dialogue, accès conditionnel à la sortie.
-- Simulation tactique : trois modules alliés et trois modules adverses, Flux limité.
-- Extérieur : récupération d'un cristal, contact ennemi, déclenchement d'un second combat.
-- Combat : attaque ciblée, coupe-flux, barrière, réparation, IA simple et neutralisation.
-- Rapport WUA avec un décalage narratif après l'observation d'un habitant natif protégeant un petit.
+1. Présentation du cataclysme, refuge à la WUA, quarante ans écoulés.
+2. Rêve étrange de Kumji, réveil, contemplation du paysage, appel du directeur.
+3. Exploration de l'aile des opérateurs : entrevue avec le directeur (père de Kumji).
+4. Rejoindre Darla et Lyrius ; traverser la porte WUA.
+5. Reconnaissance dans la plaine désolée : cellule de Flux, anomalie, combat.
+6. Après le combat : Kumji voit au loin un démon qui protège quelque chose d'indiscernable.
+7. Retour à la WUA : remise de la cellule à Lyrius et rapport au directeur ; fin de démo.
 
-Les éléments de rendu sont des placeholders 16 bits sans assets définitifs.
+**La rencontre avec le démon reste volontairement mystérieuse.** La scène ne révèle pas ce qu'il protège, conformément au scénario. Aucun combat d'entraînement imposé : le combat de la démo est l'anomalie de la plaine.
 
-## Principes
+## Système de combat (source : « Nouveau système de combat »)
 
-1. Règles métier en TypeScript pur (notamment dans `features/combat/domain`).
-2. KAPLAY gère le rendu isométrique et les scènes ; DOM gère les écrans et dialogues.
-3. Aucun ajout de mécanique qui ne sert pas directement à la boucle MVP.
-4. Chaque changement doit conserver `bun run test` et `bun run build`.
+- Attaque ordinaire : **1 Flux**.
+- Magie / Canalisation : **2 Flux** (mages futurs : Astriar, Astriana, Layana).
+- Limite : **3 Flux** (Coups foudroyants de Kumji, Mégatemps de Darla, Martial de Lyrius).
+- Chimère : **6 Flux** (prévue pour une version ultérieure).
+- Déplacement : **0 Flux**, sur cases, avec un budget de mouvement tactique de **3 points par cycle** (orthogonal 1, diagonal 2), choix de prototype.
+- Production : **8 Flux maximum par cycle** ; la production continue par seconde et la pause tactique sont héritées du MVP précédent à titre d'expérimentation.
 
-## Travaux suivants
+**Important :** Les noms des limites sont ceux du document. Faute de fiche Excel de compétences associée à ces nouveaux fichiers, leurs effets restent provisoires et ne sont pas présentés comme les capacités définitives. Les anciens tests d'amplification des attaques restent une compatibilité du moteur, mais l'interface de démo affiche les coûts fixes ci-dessus.
 
-- Valider le comportement réel des scènes dans un navigateur (clavier, interactions, lisibilité).
-- Affiner Flux / coûts et intentions ennemies avec des playtests.
-- Ajouter véritables sprites 16 bits, animations et sons.
-- Améliorer navigation (mouvement continu ou cases avec interpolation) et interactions.
-- Ajouter tests d'intégration et sauvegarde locale.
-- Introduire la progression opérateur/modules et davantage de variété de missions.
+## Principes et limites
 
-## Hors MVP
+Logique métier en TypeScript pur, rendu isométrique KAPLAY pour l'exploration, DOM pour le combat et les dialogues. Les éléments graphiques sont des placeholders. Le combat de la démo utilise encore les modules et adversaires du MVP : la configuration finale sera affinée au playtest.
 
-Monde ouvert, carte complète, chimères avancées, reliques complexes, embranchements narratifs, révélation de la Citadelle-vaisseau.
+Le réseau automatique, la conversion de PV en Flux à défaut de réserve et la pause tactique restent présents, sous réserve d'équilibrage.
 
-## Réseau de Flux automatique — itération UX
-
-Le joueur n'alloue plus manuellement l'énergie avant chaque action. Les réserves persistent, mais
-l'action demande son Flux à travers les alliés reliés jusqu'à la cellule. Un relais peut être
-vide ; la continuité des liaisons compte plus que le solde de chaque intermédiaire. Les trajets
-sont prévisualisés et les ruptures signalées. Les actions adverses ont des effets et un
-récapitulatif persistants sur l'écran. Commandes clavier intégrées.
+La CI doit vérifier `bun run test`, `bun run build` et `docker build` pour CapRover.

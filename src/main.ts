@@ -2,6 +2,7 @@ import "./style.css";
 import { createGame } from "./game/kaplay";
 import { createSession } from "./game/session";
 import { registerTitleScene } from "./scenes/title/title";
+import { registerPrologueScene } from "./scenes/prologue/prologue";
 import { registerExplorationScenes } from "./features/exploration/exploration";
 import { registerBattleScene } from "./features/combat/battle-screen";
 import { registerReportScene } from "./features/mission/report";
@@ -17,6 +18,7 @@ canvas?.setAttribute("role", "img");
 canvas?.setAttribute("aria-label", "Carte isométrique de The Dunblane Quest. Les commandes et descriptions figurent à l'écran.");
 
 registerTitleScene(k);
+registerPrologueScene(k, session);
 registerExplorationScenes(k, session);
 registerBattleScene(k, session);
 registerReportScene(k, session);

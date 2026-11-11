@@ -39,10 +39,10 @@ export function renderZone(k: KAPLAYCtx, zone: ZoneMap, start: TilePoint): IsoMa
       ]);
       if (symbol === "#") {
         k.add([k.rect(20, 13), k.pos(p.x - 10, p.y - 9), k.color(...zone.colors.wall), k.z(15 + x + y)]);
-      } else if (symbol === "I") {
+      } else if (symbol === "D") {
         character(k, { x, y }, [144, 99, 185]);
-      } else if (symbol === "E") {
-        character(k, { x, y }, [184, 91, 70]);
+      } else if (symbol === "A") {
+        character(k, { x, y }, [111, 173, 220]);
       } else if (symbol !== "." && symbol !== "P") {
         const colors: Record<string, [number, number, number]> = {
           G: [226, 181, 93], C: [74, 227, 186], R: [87, 174, 211],

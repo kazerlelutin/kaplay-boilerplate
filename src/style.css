@@ -492,3 +492,14 @@ canvas { display: block; image-rendering: pixelated; }
   color:#ffd9d0;font-size:12px;line-height:1.4;}
 .rpg-health-confirm {background:#833b39;border-color:#f2a29a;}
 .rpg-health-confirm:not(:disabled):hover {background:#9c4a45;}
+
+/* Prologue de la démo : vignettes sans révéler la vérité cachée du monde. */
+.prologue-screen {transition:background .2s ease;}
+.prologue-screen.dream {background:linear-gradient(135deg,#172c33,#46516b 65%,#191c2c);}
+.prologue-screen.room {background:linear-gradient(135deg,#252a39,#384e52);}
+.prologue-screen.window {background:linear-gradient(180deg,#a8876c,#514a45 50%,#1f3035);}
+.prologue-screen.alarm {background:linear-gradient(135deg,#243743,#4c3b41);}
+.prologue-card {max-width:610px;min-height:325px;display:flex;flex-direction:column;justify-content:center;gap:16px;}
+.prologue-card h1 {font-size:clamp(28px,4vw,48px);line-height:1.1;margin:0;}
+.prologue-card p {font-size:15px;line-height:1.7;margin:0;}
+.prologue-progress {font-size:11px;color:#a6c2bf;letter-spacing:.15em;}

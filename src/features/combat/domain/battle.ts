@@ -13,6 +13,18 @@ export const COVER: readonly Point[] = [{ col: 4, row: 2 }, { col: 7, row: 3 }];
 export const JAMMERS: readonly Point[] = [{ col: 3, row: 3 }, { col: 8, row: 5 }];
 export const SOURCE_CAPACITY = 12;
 export const UNIT_CAPACITY = 9;
+export const MAX_PRODUCTION_PER_CYCLE = 8;
+export const MOVEMENT_POINTS_PER_CYCLE = 3;
+export const BASE_ATTACK_COST = 1;
+export const MAGIC_CHANNEL_COST = 2;
+export const LIMIT_COST = 3;
+export const CHIMERA_COST = 6;
+/** Noms canoniques des limites ; effets encore provisoires en attendant leur fiche de compétences. */
+export const HERO_LIMITS: Record<string,string> = {
+  "p-weapon":"Coups foudroyants",
+  "p-barrier":"Mégatemps",
+  "p-support":"Martial",
+};
 
 export interface BattleModule {
   id: string; name: string; operator: string; role: ModuleRole;
@@ -38,6 +50,8 @@ export interface BattleState {
   guard: number;
   victoryMode?: "neutralize" | "shutdown";
   productionBoost: number;
+  fluxProducedThisCycle: number;
+  movementRemaining: Record<string,number>;
   player: BattleModule[];
   enemy: BattleModule[];
   log: string[];
@@ -88,6 +102,8 @@ function module(id: string, name: string, operator: string, role: ModuleRole, hp
 export function createBattle(kind: BattleKind): BattleState {
   const state: BattleState = {
     kind, round: 1, phase: "allocation", status: "active", flux: 6, maxFlux: SOURCE_CAPACITY, productionBoost: 0,
+    fluxProducedThisCycle:0,
+    movementRemaining:{"p-weapon":3,"p-barrier":3,"p-support":3},
     enemyFlux: 6, integrity: kind === "training" ? 12 : 16, maxIntegrity: kind === "training" ? 12 : 16,
     guard: 0, player: [
       module("p-weapon", "Lame", "Kumji", "weapon", 6, 2, 2),
@@ -163,8 +179,12 @@ export function fluxPerSecond(state: BattleState): number {
 }
 export function produceFluxSecond(state: BattleState): number {
   if (state.status!=="active") return 0;
-  const amount=Math.min(Math.max(0,state.maxFlux-state.flux),fluxPerSecond(state));
+  const amount=Math.min(
+    Math.max(0,state.maxFlux-state.flux),
+    Math.max(0,MAX_PRODUCTION_PER_CYCLE-state.fluxProducedThisCycle),
+    fluxPerSecond(state));
   state.flux+=amount;
+  state.fluxProducedThisCycle+=amount;
   state.enemyFlux=Math.min(SOURCE_CAPACITY,state.enemyFlux+2);
   if(amount>0) note(state,"Cellule : +" + amount + " Flux.","flux","p-source",amount);
   return amount;
@@ -344,14 +364,14 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
     const cost = moveCost(unit.position,action.to);
     const corner = cost === 2 && (!isBoardCellFree(state,{col:action.to.col,row:unit.position.row})
       || !isBoardCellFree(state,{col:unit.position.col,row:action.to.row}));
-    const network = feed(state,unit.id,cost ?? 1);
+    const remaining=state.movementRemaining[unit.id]??0;
     const reason = unit.hp <= 0 ? "Module hors service."
       : cost === null ? "Une case à la fois, diagonales autorisées."
       : !isBoardCellFree(state,action.to) || corner ? "Passage bloqué."
-      : !network.ok ? network.reason : "";
-    return preview(state,`Déplacer ${unit.operator}`,cost ?? 1,
-      (cost === 2 ? "Diagonale (2 Flux)." : "Case orthogonale (1 Flux).")+" "+fluxSummary(state,network,unit.id),
-      reason,{source:unit.id,energyAfter:unit.energy-network.own,fluxPlan:network});
+      : remaining<cost ? "Budget de déplacement épuisé : attendez le prochain cycle." : "";
+    return preview(state,`Déplacer ${unit.operator}`,0,
+      `Gratuit en Flux : ${cost===2?"diagonale (2 points)":"case (1 point)"}. ${remaining-(cost??0)} points restants.`,
+      reason,{source:unit.id,energyAfter:unit.energy});
   }
   if (action.type === "neutralize") {
     const unit = findModule(state.player, "p-support")!;
@@ -382,7 +402,7 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   if (action.type === "special") {
     const hero = findModule(state.player,action.actor);
     if (!hero || hero.role === "source") return preview(state,"Compétence",0,"","Opérateur inconnu.");
-    const cost = hero.id === "p-weapon" ? 6 : 5;
+    const cost = LIMIT_COST;
     const network = feed(state,hero.id,cost);
     let targeted = action.target ? findModule(state.enemy,action.target) : undefined;
     if (!targeted && hero.id !== "p-barrier") targeted = findModule(state.enemy,"e-weapon");
@@ -396,8 +416,7 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
       : targeted?.role === "source" && !enemySourceExposed(state)
         ? "Le noyau est encore verrouillé."
       : "";
-    const label = hero.id==="p-weapon" ? "Frappe de rupture"
-      : hero.id==="p-barrier" ? "Dôme protecteur" : "Impulsion EMP";
+    const label = HERO_LIMITS[hero.id] ?? "Limite";
     const description = hero.id==="p-weapon"
       ? "7 PV de frappe perforante. " : hero.id==="p-barrier"
         ? "Bouclier +12 points, matérialisé autour des alliés. "
@@ -412,7 +431,7 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   if (action.type === "guard") {
     const unit = findModule(state.player, "p-barrier")!;
     const network = feed(state,unit.id,action.power);
-    const reason = !isPositiveInteger(action.power) || action.power < 2 || action.power > 6 ? "Choisissez une puissance de 2 à 6."
+    const reason = !isPositiveInteger(action.power) || action.power < 1 || action.power > 6 ? "Choisissez une puissance de 1 à 6."
       : unit.hp === 0 ? "Bouclier hors service."
       : !sourceProtected(state) ? "Darla doit être à 2 cases de la source."
       : !network.ok ? network.reason : "";
@@ -426,7 +445,7 @@ export function previewAction(state: BattleState, action: BattleAction): ActionP
   if (!target) return preview(state, "Cible", action.power, "", "Cible introuvable.");
   const d = distance(actor.position, target.position);
   const range = isRepair ? 3 : action.type === "cut" ? 5 : 4;
-  const minPower = action.type === "cut" ? 3 : 2;
+  const minPower = action.type === "cut" ? 2 : action.type === "attack" ? BASE_ATTACK_COST : 2;
   const network = feed(state,actor.id,action.power);
   const reason = !isPositiveInteger(action.power) || action.power < minPower || action.power > 6
     ? `Puissance possible : ${minPower} à 6⚡.`
@@ -644,6 +663,9 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
   }
   if (action.type === "next") {
     state.round += 1;
+    state.fluxProducedThisCycle=0;
+    for (const unit of state.player) if(unit.role!=="source")
+      state.movementRemaining[unit.id]=MOVEMENT_POINTS_PER_CYCLE;
     // Production séparée de la réaction : +Flux réellement accordé chaque seconde.
     state.phase = "allocation";
     state.events = [];
@@ -677,18 +699,20 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
   }
   if (action.type === "move") {
     const unit = findModule(state.player,action.actor)!;
-    const cost = moveCost(unit.position,action.to)!;
-    const from = {...unit.position};
-    unit.position = {...action.to};
-    note(state,`${unit.operator} avance (${cost} Flux, reste ${unit.energy}).`,"move",unit.id,cost,from,{...action.to});
+    const cost=moveCost(unit.position,action.to)!;
+    const from={...unit.position};
+    state.movementRemaining[unit.id]-=cost;
+    unit.position={...action.to};
+    note(state,`${unit.operator} avance sans consommer de Flux (${state.movementRemaining[unit.id]} points de mouvement restants).`,
+      "move",unit.id,cost,from,{...action.to});
   } else if (action.type === "tune") {
     state.productionBoost += 1;
-    note(state,`Générateur optimisé : +${state.productionBoost} Flux produit par cycle.`,"flux","p-source",state.productionBoost);
+    note(state,`Générateur optimisé : +${state.productionBoost} Flux/seconde, 8 maximum par cycle.`,"flux","p-source",state.productionBoost);
   } else if (action.type === "special") {
     const hero = findModule(state.player,action.actor)!;
     if (hero.id === "p-barrier") {
       state.guard += 12;
-      note(state,"Dôme de Darla : +12 de protection sur le réseau.","special","p-source",12,
+      note(state,"Mégatemps de Darla (effet provisoire) : +12 protection.","special","p-source",12,
         {...hero.position},{...findModule(state.player,"p-source")!.position});
     } else if (hero.id === "p-support") {
       const epicenter = findModule(state.enemy,action.target ?? "e-weapon")!;
@@ -698,14 +722,14 @@ export function performAction(state: BattleState, action: BattleAction): ActionR
         const drained = unit.energy;
         unit.energy = 0;
         unit.disruptedFor = 3;
-        note(state,"EMP Lyrius : "+unit.operator+" -" + drained + " Flux, brouillage 3 réactions.",
+        note(state,"Martial de Lyrius (effet provisoire) : "+unit.operator+" -" + drained + " Flux, brouillage 3 réactions.",
           "special",unit.id,drained,{...hero.position},{...unit.position});
       }
     } else {
       const target = findModule(state.enemy,action.target ?? "e-weapon")!;
       const lost = Math.min(7,target.hp);
       target.hp -= lost;
-      note(state,"Frappe de rupture de Kumji : -" + lost + " PV.","special",
+      note(state,"Coups foudroyants de Kumji (effet provisoire) : -" + lost + " PV.","special",
         target.id,lost,{...hero.position},{...target.position});
       if (target.hp <= 0) {
         if (target.role==="source") {
