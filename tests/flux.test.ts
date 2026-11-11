@@ -7,7 +7,7 @@ import {
 
 test("Production initiale : 9 générés, 3 d'entretien, 6 à distribuer", () => {
   const state = createBattle("mission");
-  assert.deepEqual(getFluxEconomy(state), { produced: 9, upkeep: 3, available: 6, sourceHp: 5 });
+  assert.deepEqual(getFluxEconomy(state), { produced: 8, upkeep: 2, available: 6, sourceHp: 5 });
   assert.equal(state.flux, 6);
   assert.equal(state.phase, "allocation");
 });

@@ -18,7 +18,7 @@ export const PROLOGUE:readonly PrologueBeat[]=[
     text:"Kumji ouvre les yeux dans sa chambre. Il garde l'impression étrange que son rêve était réel.",
     action:"Se lever",tone:"room"},
   {place:"CITADELLE WUA · FENÊTRE",title:"Le monde dévasté",
-    text:"Au-delà de la vitre, les paysages désolés s'étendent à perte de vue. Depuis quarante ans, la citadelle protège les survivants.",
+    text:"Par la fenêtre, Kumji contemple les paysages désolés qui s'étendent à perte de vue. Depuis quarante ans, la citadelle protège les survivants.",
     action:"Regarder au dehors",tone:"window"},
   {place:"INTERPHONE WUA",title:"Convocation",
     text:"« Opérateur Kumji demandé dans le bureau du directeur. Je répète : Kumji est demandé dans le bureau du directeur. »",

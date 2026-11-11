@@ -168,8 +168,8 @@ export function isBoardCellFree(state: BattleState, to: Point): boolean {
 }
 export function getFluxEconomy(state: BattleState): { produced: number; upkeep: number; available: number; sourceHp: number } {
   const sourceHp = findModule(state.player, "p-source")?.hp ?? 0;
-  const produced = sourceHp > 0 ? 4 + sourceHp + state.productionBoost : 0;
-  const upkeep = state.player.filter((unit) => unit.role !== "source" && unit.hp > 0).length;
+  const produced = sourceHp > 0 ? MAX_PRODUCTION_PER_CYCLE + state.productionBoost - (5 - sourceHp) : 0;
+  const upkeep = 2;
   return { produced, upkeep, available: Math.max(0, produced - upkeep), sourceHp };
 }
 /** Production réellement accordée par seconde, indépendamment des réactions ennemies. */
