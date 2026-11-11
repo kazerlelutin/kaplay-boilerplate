@@ -1,7 +1,7 @@
 import type { KAPLAYCtx } from "kaplay";
 import type { GameSession } from "../../game/session";
 import { showDialogue, isDialogueActive } from "../dialogue/dialogue";
-import { MAPS, nearbyLandmark, walkable, type TilePoint, type ZoneId } from "./domain/maps";
+import { MAPS, nearbyLandmark, walkable, type TilePoint } from "./domain/maps";
 import { canLeaveWua, canReturnWua, currentObjective } from "./domain/demo-story";
 import { renderZone } from "./rendering/isometric";
 import { showExplorationHUD } from "../../shared/ui/screen";
