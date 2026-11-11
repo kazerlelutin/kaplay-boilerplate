@@ -8,7 +8,7 @@ export function currentObjective(zone: ZoneId, session: GameSession): string {
     if(!session.alliesJoined) return "Retrouver Darla et Lyrius avant le départ (marqueur bleu).";
     return "Rejoindre la porte de sortie de la WUA.";
   }
-  if(!session.sampleCollected) return "Rechercher la cellule de Flux dans la plaine.";
+  if(!session.cellLocated) return "Rechercher la cellule de Flux dans la plaine.";
   if(!session.battleWon) return "Anomalie énergétique : neutraliser le réseau perturbé.";
   return "Mission accomplie : rejoindre le point de retour à la WUA.";
 }

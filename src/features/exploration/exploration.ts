@@ -68,14 +68,14 @@ export function registerExplorationScenes(k:KAPLAYCtx,session:GameSession):void 
           }
         } else {
           if(marker==="C") {
-            if(session.sampleCollected) {
-              showDialogue([{speaker:"Lyrius",text:"La cellule a été récupérée. Il faut sécuriser les lieux."}]);
+            if(session.cellLocated) {
+              showDialogue([{speaker:"Lyrius",text:"La cellule est repérée. La zone doit d'abord être sécurisée."}]);
             } else {
               showDialogue([
                 {speaker:"Darla",text:"La cellule de Flux est intacte... au milieu de cette plaine."},
                 {speaker:"Lyrius",text:"Une anomalie dans le Flux ! Préparez-vous au combat !"},
               ],()=>{
-                session.sampleCollected=true;
+                session.cellLocated=true;
                 session.battleKind="mission";
                 k.go("battle");
               });

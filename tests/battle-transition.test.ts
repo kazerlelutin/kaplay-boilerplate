@@ -28,6 +28,7 @@ test("La victoire de mission renvoie à l'extérieur", () => {
   assert.equal(performAction(battle, { type: "neutralize" }).ok, true);
   assert.equal(completeBattle(battle, session), "exterior");
   assert.equal(session.battleWon, true);
+  assert.equal(session.sampleCollected, true);
 });
 
 test("Le noyau adverse détruit débloque une autre victoire", () => {

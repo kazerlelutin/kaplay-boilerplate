@@ -17,6 +17,7 @@ export function completeBattle(
       return "wua";
     }
     session.battleWon = true;
+    session.sampleCollected = true; // récupérée après neutralisation de l’anomalie
     return "exterior";
   }
   if (battle.status === "defeat") return "battle";

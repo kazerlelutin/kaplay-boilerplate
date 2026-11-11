@@ -33,10 +33,12 @@ test("La cellule déclenche l'anomalie et le retour impose un combat remporté",
   const session=createSession();
   assert.equal(session.battleKind,"mission");
   assert.equal(canReturnWua(session),false);
-  session.sampleCollected=true;
+  session.cellLocated=true;
+  assert.equal(session.sampleCollected,false);
   assert.equal(canReturnWua(session),false);
   assert.match(currentObjective("exterior",session),/Anomalie/);
   session.battleWon=true;
+  session.sampleCollected=true;
   assert.equal(canReturnWua(session),true);
   assert.match(currentObjective("exterior",session),/retour/);
   assert.equal(tileAt(MAPS.exterior,{x:4,y:3}),"C");
